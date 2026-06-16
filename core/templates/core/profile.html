@@ -1,0 +1,131 @@
+{% extends 'base.html' %}
+
+{% block title %}@{{ profile_user.username }} / GRIND{% endblock %}
+
+{% block content %}
+<!-- Profile Header -->
+<div class="border-b border-gray-200">
+    <!-- Header Image -->
+    <div class="h-48 bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500"></div>
+
+    <!-- Profile Info -->
+    <div class="px-4 pb-4">
+        <!-- Avatar -->
+        <div class="flex justify-between items-start -mt-16 mb-4">
+            <div class="w-32 h-32 bg-gradient-to-br from-green-400 to-blue-500 rounded-full border-4 border-white flex items-center justify-center">
+                <span class="text-white font-bold text-5xl">{{ profile_user.username|first|upper }}</span>
+            </div>
+            {% if user.is_authenticated and user != profile_user %}
+                <div class="flex gap-2">
+                    <a href="{% url 'message-thread' profile_user.username %}" class="post-btn" style="padding: 8px 16px;">
+                        <i class="fas fa-envelope mr-2"></i>Message
+                    </a>
+                    {% if is_following %}
+                        <a href="{% url 'unfollow-user' profile_user.username %}" class="nav-item" style="padding: 8px 16px; margin: 0;">
+                            Following
+                        </a>
+                    {% else %}
+                        <a href="{% url 'follow-user' profile_user.username %}" class="nav-item" style="padding: 8px 16px; margin: 0;">
+                            Follow
+                        </a>
+                    {% endif %}
+                </div>
+            {% endif %}
+        </div>
+
+        <!-- Name & Handle -->
+        <div class="mb-3">
+            <h1 class="text-2xl font-bold text-gray-900">{{ profile_user.first_name }}</h1>
+            <p class="text-gray-500">@{{ profile_user.username }}</p>
+        </div>
+
+        <!-- Bio -->
+        {% if profile_user.profile.bio %}
+            <p class="text-gray-900 text-base mb-4">{{ profile_user.profile.bio }}</p>
+        {% endif %}
+
+        <!-- Meta Info -->
+        <div class="flex flex-wrap gap-4 text-gray-500 text-sm mb-4">
+            {% if profile_user.profile.location %}
+                <span><i class="fas fa-map-pin mr-2"></i>{{ profile_user.profile.location }}</span>
+            {% endif %}
+            {% if profile_user.profile.website %}
+                <span><i class="fas fa-link mr-2"></i><a href="{{ profile_user.profile.website }}" class="text-blue-500 hover:underline">{{ profile_user.profile.website }}</a></span>
+            {% endif %}
+            <span><i class="fas fa-calendar mr-2"></i>Joined {{ profile_user.date_joined|date:"b Y" }}</span>
+        </div>
+
+        <!-- Stats -->
+        <div class="flex gap-6 text-sm">
+            <div>
+                <span class="font-bold text-gray-900">{{ following }}</span>
+                <span class="text-gray-500 ml-1">Following</span>
+            </div>
+            <div>
+                <span class="font-bold text-gray-900">{{ followers }}</span>
+                <span class="text-gray-500 ml-1">Followers</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Tabs -->
+<div class="border-b border-gray-200 flex">
+    <div class="flex-1 p-4 text-center border-b-2 border-black font-bold cursor-pointer">
+        Posts
+    </div>
+    <div class="flex-1 p-4 text-center text-gray-500 font-bold cursor-pointer hover:bg-gray-50">
+        Replies
+    </div>
+</div>
+
+<!-- Tweets -->
+<div>
+    {% if tweets %}
+        {% for tweet in tweets %}
+        <div class="tweet-hover border-b border-gray-200 p-4 cursor-pointer transition">
+            <a href="{% url 'tweet-detail' tweet.id %}" class="block group">
+                <div class="flex space-x-3">
+                    <div class="w-12 h-12 bg-gradient-to-br from-orange-400 to-red-500 rounded-full flex-shrink-0 flex items-center justify-center">
+                        <span class="text-white font-bold">{{ profile_user.username|first|upper }}</span>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <div class="flex items-center space-x-2">
+                            <span class="font-bold text-gray-900 group-hover:underline">{{ profile_user.first_name }}</span>
+                            <span class="text-gray-500">@{{ profile_user.username }}</span>
+                            <span class="text-gray-500">·</span>
+                            <span class="text-gray-500 text-sm">{{ tweet.created_at|date:"M d" }}</span>
+                        </div>
+                        <p class="text-gray-900 text-base mt-2 leading-normal">{{ tweet.content }}</p>
+
+                        <!-- Tweet Actions -->
+                        <div class="flex justify-between mt-3 text-gray-500 max-w-xs text-sm" onclick="event.preventDefault();">
+                            <div class="tweet-action flex items-center space-x-2">
+                                <i class="fas fa-reply"></i>
+                                <span class="text-xs">{{ tweet.replies_count }}</span>
+                            </div>
+                            <div class="retweet-btn tweet-action flex items-center space-x-2">
+                                <i class="fas fa-retweet"></i>
+                                <span class="text-xs">{{ tweet.retweets_count }}</span>
+                            </div>
+                            <div class="like-btn tweet-action flex items-center space-x-2">
+                                <i class="fas fa-heart"></i>
+                                <span class="text-xs">{{ tweet.likes_count }}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </a>
+        </div>
+        {% endfor %}
+    {% else %}
+    <div class="p-8 text-center">
+        <div class="mb-4">
+            <i class="fas fa-inbox text-6xl text-gray-200"></i>
+        </div>
+        <h3 class="text-2xl font-bold mb-2">No posts yet</h3>
+        <p class="text-gray-500">{{ profile_user.first_name }} hasn't posted yet</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

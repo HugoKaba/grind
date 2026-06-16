@@ -1,0 +1,61 @@
+{% extends 'base.html' %}
+
+{% block title %}New Conversation / GRIND{% endblock %}
+
+{% block content %}
+<!-- Header -->
+<div class="header-bar">
+    <div class="flex items-center gap-3">
+        <a href="{% url 'messages' %}" class="text-red-600 hover:text-red-700">
+            <i class="fas fa-arrow-left text-xl"></i>
+        </a>
+        <h2 class="header-title">Start Conversation</h2>
+    </div>
+</div>
+
+<!-- Search Bar -->
+<div class="p-6 border-b-2 border-gray-200">
+    <input
+        type="text"
+        id="search-users"
+        placeholder="Search athletes..."
+        class="search-input w-full"
+    >
+</div>
+
+<!-- Users List -->
+<div class="divide-y divide-gray-200">
+    {% if users %}
+        {% for user in users %}
+        <a href="{% url 'message-thread' user.username %}" class="block p-4 hover:bg-gray-50 transition">
+            <div class="flex items-center space-x-3">
+                <div class="avatar">{{ user.username|first|upper }}</div>
+                <div class="flex-1">
+                    <div class="tweet-author">{{ user.first_name }}</div>
+                    <div class="tweet-handle">@{{ user.username }}</div>
+                </div>
+                <i class="fas fa-arrow-right text-gray-400"></i>
+            </div>
+        </a>
+        {% endfor %}
+    {% else %}
+        <div class="p-8 text-center text-gray-500">
+            <p>No users available</p>
+        </div>
+    {% endif %}
+</div>
+
+<script>
+    // Simple search filter
+    const searchInput = document.getElementById('search-users');
+    const userItems = document.querySelectorAll('a[href*="/messages/"]');
+
+    searchInput.addEventListener('input', (e) => {
+        const query = e.target.value.toLowerCase();
+        userItems.forEach(item => {
+            const text = item.textContent.toLowerCase();
+            item.style.display = text.includes(query) ? 'block' : 'none';
+        });
+    });
+</script>
+{% endblock %}

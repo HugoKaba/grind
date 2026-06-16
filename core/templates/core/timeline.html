@@ -1,0 +1,249 @@
+{% extends 'base.html' %}
+
+{% block title %}Home / GRIND{% endblock %}
+
+{% block content %}
+<!-- Header with Tabs -->
+<div class="header-bar sticky top-0 z-10">
+    <h2 class="header-title mb-4">Home</h2>
+    <div class="flex gap-4 border-b-2 border-gray-200">
+        <button onclick="showFeed('all')" id="tab-all" class="px-4 py-3 font-bold border-b-4 border-red-600 text-red-600 cursor-pointer">
+            Everyone
+        </button>
+        <button onclick="showFeed('friends')" id="tab-friends" class="px-4 py-3 font-bold border-b-4 border-transparent text-gray-600 hover:text-gray-900 cursor-pointer">
+            Friends
+        </button>
+    </div>
+</div>
+
+<!-- Tweet Composer -->
+{% if user.is_authenticated %}
+<div class="border-b border-gray-200 p-4 hover:bg-gray-50 transition">
+    <div class="flex space-x-4">
+        <div class="w-12 h-12 bg-gradient-to-br from-blue-400 to-blue-600 rounded-full flex-shrink-0 flex items-center justify-center">
+            <span class="text-white font-bold text-lg">{{ user.username|first|upper }}</span>
+        </div>
+        <div class="flex-1">
+            <form method="POST" action="{% url 'post-tweet' %}" class="space-y-4">
+                {% csrf_token %}
+                <textarea name="content" maxlength="280" placeholder="Share your sports update..." rows="3" class="w-full text-2xl font-light outline-none resize-none bg-transparent" required></textarea>
+                <div class="flex justify-end">
+                    <button type="submit" class="bg-black text-white font-bold py-2 px-8 rounded-full hover:bg-gray-900 transition text-lg">
+                        Post
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Tweets Feed -->
+<div id="feed-all">
+    {% for tweet in tweets %}
+    <div class="tweet-hover border-b border-gray-200 p-4 cursor-pointer transition">
+        <a href="{% url 'tweet-detail' tweet.id %}" class="block group">
+            <div class="flex space-x-3">
+                <!-- Avatar -->
+                <div class="w-12 h-12 bg-gradient-to-br from-purple-400 to-pink-600 rounded-full flex-shrink-0 flex items-center justify-center">
+                    <span class="text-white font-bold text-lg">{{ tweet.author.username|first|upper }}</span>
+                </div>
+
+                <!-- Tweet Content -->
+                <div class="flex-1 min-w-0">
+                    <!-- Author Info -->
+                    <div class="flex items-center space-x-2">
+                        <span class="font-bold text-gray-900 group-hover:underline">{{ tweet.author.first_name }}</span>
+                        <span class="text-gray-500">@{{ tweet.author.username }}</span>
+                        <span class="text-gray-500">·</span>
+                        <span class="text-gray-500 text-sm">{{ tweet.created_at|date:"M d" }}</span>
+                    </div>
+
+                    <!-- Tweet Text -->
+                    <p class="text-gray-900 text-base mt-2 leading-normal break-words">{{ tweet.content }}</p>
+
+                    <!-- Tweet Actions -->
+                    <div class="flex justify-between mt-3 max-w-md text-sm">
+                        <!-- Reply -->
+                        <a href="{% url 'reply-tweet' tweet.id %}" class="action-btn tweet-action flex items-center space-x-2 group/reply">
+                            <div class="group-hover/reply:bg-red-50 rounded-full p-2">
+                                <i class="fas fa-reply text-lg"></i>
+                            </div>
+                            <span class="text-xs action-label group-hover/reply:text-red-600">{{ tweet.replies_count }}</span>
+                            <div class="tooltip">Reply</div>
+                        </a>
+
+                        <!-- Retweet -->
+                        {% if user.is_authenticated %}
+                            <button data-action="retweet" data-tweet-id="{{ tweet.id }}" class="action-btn tweet-action flex items-center space-x-2 group/retweet" style="background: none; border: none;">
+                                <div class="group-hover/retweet:bg-green-50 rounded-full p-2">
+                                    <i class="fas fa-retweet text-lg"></i>
+                                </div>
+                                <span class="text-xs action-label group-hover/retweet:text-green-600">{{ tweet.retweets_count }}</span>
+                                <div class="tooltip">Retweet</div>
+                            </button>
+                        {% else %}
+                            <div class="action-btn tweet-action flex items-center space-x-2">
+                                <div class="rounded-full p-2">
+                                    <i class="fas fa-retweet text-lg"></i>
+                                </div>
+                                <span class="text-xs action-label">{{ tweet.retweets_count }}</span>
+                            </div>
+                        {% endif %}
+
+                        <!-- Like -->
+                        {% if user.is_authenticated %}
+                            <button data-action="like" data-tweet-id="{{ tweet.id }}" class="action-btn tweet-action flex items-center space-x-2 group/like" style="background: none; border: none;">
+                                <div class="group-hover/like:bg-red-50 rounded-full p-2">
+                                    <i class="fas fa-heart text-lg"></i>
+                                </div>
+                                <span class="text-xs action-label group-hover/like:text-red-600">{{ tweet.likes_count }}</span>
+                                <div class="tooltip">Like</div>
+                            </button>
+                        {% else %}
+                            <div class="action-btn tweet-action flex items-center space-x-2">
+                                <div class="rounded-full p-2">
+                                    <i class="fas fa-heart text-lg"></i>
+                                </div>
+                                <span class="text-xs action-label">{{ tweet.likes_count }}</span>
+                            </div>
+                        {% endif %}
+
+                        <!-- Bookmark -->
+                        {% if user.is_authenticated %}
+                            <button data-action="bookmark" data-tweet-id="{{ tweet.id }}" class="action-btn tweet-action flex items-center space-x-2 group/bookmark" style="background: none; border: none;">
+                                <div class="group-hover/bookmark:bg-yellow-50 rounded-full p-2">
+                                    <i class="fas fa-bookmark text-lg"></i>
+                                </div>
+                                <div class="tooltip">Bookmark</div>
+                            </button>
+                        {% endif %}
+
+                        <!-- Share -->
+                        <div class="action-btn tweet-action flex items-center space-x-2 group/share">
+                            <div class="group-hover/share:bg-blue-50 rounded-full p-2">
+                                <i class="fas fa-share text-lg"></i>
+                            </div>
+                            <div class="tooltip">Share</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </a>
+    </div>
+    {% empty %}
+    <div class="p-8 text-center">
+        <div class="mb-4">
+            <i class="fas fa-feather text-6xl text-gray-200"></i>
+        </div>
+        <h3 class="text-2xl font-bold mb-2">No posts yet</h3>
+        <p class="text-gray-500 mb-4">Be the first to share something!</p>
+        {% if user.is_authenticated %}
+            <a href="{% url 'post-tweet' %}" class="inline-block bg-black text-white font-bold py-2 px-8 rounded-full hover:bg-gray-900">
+                Create a post
+            </a>
+        {% else %}
+            <a href="{% url 'login' %}" class="inline-block bg-black text-white font-bold py-2 px-8 rounded-full hover:bg-gray-900">
+                Login to post
+            </a>
+        {% endif %}
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Friends Feed -->
+<div id="feed-friends" style="display: none;">
+    {% if friend_tweets %}
+        {% for tweet in friend_tweets %}
+        <div class="tweet-hover border-b border-gray-200 p-4 cursor-pointer transition">
+            <a href="{% url 'tweet-detail' tweet.id %}" class="block group">
+                <div class="flex space-x-3">
+                    <div class="w-12 h-12 bg-gradient-to-br from-purple-400 to-pink-600 rounded-full flex-shrink-0 flex items-center justify-center">
+                        <span class="text-white font-bold text-lg">{{ tweet.author.username|first|upper }}</span>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <div class="flex items-center space-x-2">
+                            <span class="font-bold text-gray-900 group-hover:underline">{{ tweet.author.first_name }}</span>
+                            <span class="text-gray-500">@{{ tweet.author.username }}</span>
+                            <span class="text-gray-500">·</span>
+                            <span class="text-gray-500 text-sm">{{ tweet.created_at|date:"M d" }}</span>
+                        </div>
+                        <p class="text-gray-900 text-base mt-2 leading-normal break-words">{{ tweet.content }}</p>
+                        <div class="flex justify-between mt-3 max-w-md text-sm">
+                            <a href="{% url 'reply-tweet' tweet.id %}" class="action-btn tweet-action flex items-center space-x-2 group/reply">
+                                <div class="group-hover/reply:bg-red-50 rounded-full p-2">
+                                    <i class="fas fa-reply text-lg"></i>
+                                </div>
+                                <span class="text-xs action-label group-hover/reply:text-red-600">{{ tweet.replies_count }}</span>
+                                <div class="tooltip">Reply</div>
+                            </a>
+                            {% if user.is_authenticated %}
+                                <button data-action="retweet" data-tweet-id="{{ tweet.id }}" class="action-btn tweet-action flex items-center space-x-2 group/retweet" style="background: none; border: none;">
+                                    <div class="group-hover/retweet:bg-green-50 rounded-full p-2">
+                                        <i class="fas fa-retweet text-lg"></i>
+                                    </div>
+                                    <span class="text-xs action-label group-hover/retweet:text-green-600">{{ tweet.retweets_count }}</span>
+                                    <div class="tooltip">Retweet</div>
+                                </button>
+                                <button data-action="like" data-tweet-id="{{ tweet.id }}" class="action-btn tweet-action flex items-center space-x-2 group/like" style="background: none; border: none;">
+                                    <div class="group-hover/like:bg-red-50 rounded-full p-2">
+                                        <i class="fas fa-heart text-lg"></i>
+                                    </div>
+                                    <span class="text-xs action-label group-hover/like:text-red-600">{{ tweet.likes_count }}</span>
+                                    <div class="tooltip">Like</div>
+                                </button>
+                                <button data-action="bookmark" data-tweet-id="{{ tweet.id }}" class="action-btn tweet-action flex items-center space-x-2 group/bookmark" style="background: none; border: none;">
+                                    <div class="group-hover/bookmark:bg-yellow-50 rounded-full p-2">
+                                        <i class="fas fa-bookmark text-lg"></i>
+                                    </div>
+                                    <div class="tooltip">Bookmark</div>
+                                </button>
+                            {% endif %}
+                            <div class="action-btn tweet-action flex items-center space-x-2 group/share">
+                                <div class="group-hover/share:bg-blue-50 rounded-full p-2">
+                                    <i class="fas fa-share text-lg"></i>
+                                </div>
+                                <div class="tooltip">Share</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </a>
+        </div>
+        {% endfor %}
+    {% else %}
+        <div class="p-8 text-center">
+            <div class="mb-4">
+                <i class="fas fa-user-friends text-6xl text-gray-200"></i>
+            </div>
+            <h3 class="text-2xl font-bold mb-2">No posts from friends</h3>
+            <p class="text-gray-500">Follow people to see their posts here</p>
+        </div>
+    {% endif %}
+</div>
+
+<script>
+function showFeed(type) {
+    const feedAll = document.getElementById('feed-all');
+    const feedFriends = document.getElementById('feed-friends');
+    const tabAll = document.getElementById('tab-all');
+    const tabFriends = document.getElementById('tab-friends');
+
+    if (type === 'all') {
+        feedAll.style.display = 'block';
+        feedFriends.style.display = 'none';
+        tabAll.classList.add('border-b-4', 'border-red-600', 'text-red-600');
+        tabAll.classList.remove('border-transparent', 'text-gray-600');
+        tabFriends.classList.remove('border-b-4', 'border-red-600', 'text-red-600');
+        tabFriends.classList.add('border-transparent', 'text-gray-600');
+    } else {
+        feedAll.style.display = 'none';
+        feedFriends.style.display = 'block';
+        tabFriends.classList.add('border-b-4', 'border-red-600', 'text-red-600');
+        tabFriends.classList.remove('border-transparent', 'text-gray-600');
+        tabAll.classList.remove('border-b-4', 'border-red-600', 'text-red-600');
+        tabAll.classList.add('border-transparent', 'text-gray-600');
+    }
+}
+</script>
+{% endblock %}

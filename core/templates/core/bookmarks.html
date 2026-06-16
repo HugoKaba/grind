@@ -1,0 +1,59 @@
+{% extends 'base.html' %}
+
+{% block title %}Bookmarks / GRIND{% endblock %}
+
+{% block content %}
+<!-- Header -->
+<div class="border-b border-gray-200 p-4 sticky top-0 bg-white bg-opacity-80 backdrop-blur">
+    <h2 class="text-xl font-bold">Bookmarks</h2>
+    <p class="text-sm text-gray-500">{{ bookmarks_count }} saved posts</p>
+</div>
+
+<!-- Bookmarks Feed -->
+<div>
+    {% if tweets %}
+        {% for tweet in tweets %}
+        <div class="tweet-hover border-b border-gray-200 p-4 cursor-pointer transition">
+            <a href="{% url 'tweet-detail' tweet.id %}" class="block group">
+                <div class="flex space-x-3">
+                    <div class="w-12 h-12 bg-gradient-to-br from-purple-400 to-pink-600 rounded-full flex-shrink-0 flex items-center justify-center">
+                        <span class="text-white font-bold">{{ tweet.author.username|first|upper }}</span>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <div class="flex items-center space-x-2">
+                            <span class="font-bold text-gray-900 group-hover:underline">{{ tweet.author.first_name }}</span>
+                            <span class="text-gray-500">@{{ tweet.author.username }}</span>
+                            <span class="text-gray-500">·</span>
+                            <span class="text-gray-500 text-sm">{{ tweet.created_at|date:"M d" }}</span>
+                        </div>
+                        <p class="text-gray-900 text-base mt-2 leading-normal">{{ tweet.content }}</p>
+                        <div class="flex justify-between mt-3 text-gray-500 max-w-md text-sm">
+                            <div class="tweet-action flex items-center space-x-2">
+                                <i class="fas fa-reply"></i>
+                                <span class="text-xs">{{ tweet.replies_count }}</span>
+                            </div>
+                            <div class="retweet-btn tweet-action flex items-center space-x-2">
+                                <i class="fas fa-retweet"></i>
+                                <span class="text-xs">{{ tweet.retweets_count }}</span>
+                            </div>
+                            <div class="like-btn tweet-action flex items-center space-x-2">
+                                <i class="fas fa-heart"></i>
+                                <span class="text-xs">{{ tweet.likes_count }}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </a>
+        </div>
+        {% endfor %}
+    {% else %}
+        <div class="p-8 text-center">
+            <div class="mb-4">
+                <i class="fas fa-bookmark text-6xl text-gray-200"></i>
+            </div>
+            <h3 class="text-2xl font-bold mb-2">No bookmarks yet</h3>
+            <p class="text-gray-500">Save posts to read them later</p>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,32 @@
+{% extends 'base.html' %}
+
+{% block title %}Compose Post / GRIND{% endblock %}
+
+{% block content %}
+<div class="border-b border-gray-200 p-4 sticky top-0 bg-white bg-opacity-80 backdrop-blur">
+    <h2 class="text-xl font-bold">New post</h2>
+</div>
+
+<div class="p-4">
+    <div class="flex space-x-4 mb-6">
+        <div class="w-12 h-12 bg-gradient-to-br from-blue-400 to-blue-600 rounded-full flex-shrink-0 flex items-center justify-center">
+            <span class="text-white font-bold">{{ user.username|first|upper }}</span>
+        </div>
+        <div class="flex-1">
+            <div class="text-gray-500">{{ user.first_name }} @{{ user.username }}</div>
+            <form method="POST" class="space-y-4">
+                {% csrf_token %}
+                <textarea name="content" maxlength="280" rows="8" placeholder="What's the sports news?!" class="w-full text-4xl font-light outline-none resize-none" required autofocus></textarea>
+                <div class="flex justify-end space-x-3">
+                    <a href="{% url 'timeline' %}" class="bg-gray-100 text-black font-bold py-2 px-8 rounded-full hover:bg-gray-200 transition">
+                        Cancel
+                    </a>
+                    <button type="submit" class="bg-black text-white font-bold py-3 px-8 rounded-full hover:bg-gray-900 transition text-lg">
+                        Post
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

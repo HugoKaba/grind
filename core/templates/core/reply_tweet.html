@@ -1,0 +1,58 @@
+{% extends 'base.html' %}
+
+{% block title %}Reply / GRIND{% endblock %}
+
+{% block content %}
+<!-- Header -->
+<div class="header-bar">
+    <h2 class="header-title">Reply to post</h2>
+</div>
+
+<!-- Parent Tweet -->
+<div class="border-b-2 border-gray-200 p-6 bg-gray-50">
+    <div class="flex space-x-3">
+        <div class="avatar">{{ parent_tweet.author.username|first|upper }}</div>
+        <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-2">
+                <span class="tweet-author">{{ parent_tweet.author.first_name }}</span>
+                <span class="tweet-handle">@{{ parent_tweet.author.username }}</span>
+            </div>
+            <p class="tweet-text">{{ parent_tweet.content }}</p>
+        </div>
+    </div>
+</div>
+
+<!-- Reply Form -->
+<div class="p-6">
+    <div class="flex space-x-4 mb-6">
+        <div class="avatar">{{ user.username|first|upper }}</div>
+        <div class="flex-1">
+            <form method="POST" class="space-y-4">
+                {% csrf_token %}
+                <textarea
+                    name="content"
+                    maxlength="280"
+                    rows="5"
+                    placeholder="Write your reply..."
+                    required
+                    autofocus
+                    class="w-full text-base font-normal outline-none resize-none border-2 border-gray-300 rounded-lg p-3 text-gray-900 placeholder-gray-500 focus:border-red-600 transition"
+                ></textarea>
+
+                <div class="flex justify-end space-x-3">
+                    <a href="{% url 'tweet-detail' parent_tweet.id %}" class="nav-item" style="margin: 0; padding: 10px 20px; border-radius: 8px; background: #f3f4f6; color: #1f2937;">
+                        Cancel
+                    </a>
+                    <button
+                        type="submit"
+                        class="post-btn"
+                        style="margin: 0; padding: 10px 20px;"
+                    >
+                        Reply
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

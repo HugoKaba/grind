@@ -1,0 +1,60 @@
+{% extends 'base.html' %}
+
+{% block title %}Notifications / GRIND{% endblock %}
+
+{% block content %}
+<!-- Header -->
+<div class="border-b border-gray-200 p-4 sticky top-0 bg-white bg-opacity-80 backdrop-blur">
+    <h2 class="text-xl font-bold">Notifications</h2>
+    {% if unread_count > 0 %}
+        <p class="text-sm text-gray-500">{{ unread_count }} new notifications</p>
+    {% endif %}
+</div>
+
+<!-- Notifications List -->
+<div>
+    {% if notifications %}
+        {% for notif in notifications %}
+        <div class="border-b border-gray-200 p-4 hover:bg-gray-50 transition cursor-pointer">
+            <div class="flex space-x-3">
+                <div class="w-12 h-12 bg-gradient-to-br from-blue-400 to-blue-600 rounded-full flex-shrink-0 flex items-center justify-center">
+                    <span class="text-white font-bold text-sm">{{ notif.actor.username|first|upper }}</span>
+                </div>
+                <div class="flex-1 min-w-0">
+                    <div class="flex items-center space-x-2">
+                        {% if notif.notification_type == 'like' %}
+                            <span class="text-gray-900"><strong>{{ notif.actor.first_name }}</strong> liked your post</span>
+                            <span class="text-red-500">♥</span>
+                        {% elif notif.notification_type == 'retweet' %}
+                            <span class="text-gray-900"><strong>{{ notif.actor.first_name }}</strong> retweeted your post</span>
+                            <span class="text-green-500">🔄</span>
+                        {% elif notif.notification_type == 'follow' %}
+                            <span class="text-gray-900"><strong>{{ notif.actor.first_name }}</strong> followed you</span>
+                            <span class="text-blue-500">👤</span>
+                        {% elif notif.notification_type == 'reply' %}
+                            <span class="text-gray-900"><strong>{{ notif.actor.first_name }}</strong> replied to your post</span>
+                            <span class="text-orange-500">💬</span>
+                        {% elif notif.notification_type == 'message' %}
+                            <span class="text-gray-900"><strong>{{ notif.actor.first_name }}</strong> sent you a message</span>
+                            <span class="text-purple-500">✉️</span>
+                        {% endif %}
+                    </div>
+                    <p class="text-sm text-gray-500 mt-1">{{ notif.created_at|date:"M d, H:i" }}</p>
+                    {% if notif.tweet %}
+                        <p class="text-gray-900 text-sm mt-2 border-l-2 border-gray-200 pl-2">{{ notif.tweet.content|truncatewords:15 }}</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    {% else %}
+        <div class="p-8 text-center">
+            <div class="mb-4">
+                <i class="fas fa-bell text-6xl text-gray-200"></i>
+            </div>
+            <h3 class="text-2xl font-bold mb-2">No notifications</h3>
+            <p class="text-gray-500">When something happens, you'll see it here</p>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}
