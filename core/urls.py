@@ -19,10 +19,14 @@ from .views import (
     messages,
     message_thread,
     new_message,
+    api_docs,
+    logout_view,
 )
 
 urlpatterns = [
     path('', TimelineView.as_view(), name='timeline'),
+    path('api-docs/', api_docs, name='api-docs'),
+    path('logout/', logout_view, name='logout'),
     path('notifications/', notifications, name='notifications'),
     path('trending/', trending, name='trending'),
     path('bookmarks/', bookmarks, name='bookmarks'),

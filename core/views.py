@@ -1,5 +1,6 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth import logout
 from django.views.generic import ListView, DetailView
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import Q
@@ -258,3 +259,13 @@ def new_message(request):
     users = User.objects.filter(id__in=following_users)
     context = {'users': users}
     return render(request, 'core/new_message.html', context)
+
+
+def api_docs(request):
+    return render(request, 'api_docs.html')
+
+
+@login_required
+def logout_view(request):
+    logout(request)
+    return redirect('login')

@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GRIND API Documentation</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .endpoint-get { @apply bg-blue-50 border-l-4 border-blue-500; }
+        .endpoint-post { @apply bg-green-50 border-l-4 border-green-500; }
+        .endpoint-put { @apply bg-yellow-50 border-l-4 border-yellow-500; }
+        .endpoint-delete { @apply bg-red-50 border-l-4 border-red-500; }
+        .method-get { @apply bg-blue-100 text-blue-800 px-3 py-1 rounded font-bold text-sm; }
+        .method-post { @apply bg-green-100 text-green-800 px-3 py-1 rounded font-bold text-sm; }
+        .method-put { @apply bg-yellow-100 text-yellow-800 px-3 py-1 rounded font-bold text-sm; }
+        .method-delete { @apply bg-red-100 text-red-800 px-3 py-1 rounded font-bold text-sm; }
+        code { @apply bg-gray-100 px-2 py-1 rounded font-mono text-sm; }
+        pre { @apply bg-gray-900 text-gray-100 p-4 rounded overflow-x-auto; }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <!-- Navbar -->
+    <nav class="bg-red-600 text-white shadow-lg sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <i class="fas fa-dumbbell text-2xl"></i>
+                <h1 class="text-2xl font-bold">GRIND API Documentation</h1>
+            </div>
+            <div class="text-sm">v1.0 - Sports Social Platform</div>
+        </div>
+    </nav>
+
+    <div class="max-w-7xl mx-auto px-6 py-8">
+        <!-- Introduction -->
+        <div class="bg-white rounded-lg shadow-md p-8 mb-8">
+            <h2 class="text-3xl font-bold text-gray-900 mb-4">🏋️ GRIND API</h2>
+            <p class="text-gray-700 mb-4">
+                Complete RESTful API for the GRIND sports social platform. Build with Django REST Framework.
+            </p>
+            <div class="grid grid-cols-3 gap-4 mb-6">
+                <div class="bg-blue-50 p-4 rounded-lg">
+                    <div class="text-2xl font-bold text-blue-600">30+</div>
+                    <div class="text-gray-700">Endpoints</div>
+                </div>
+                <div class="bg-green-50 p-4 rounded-lg">
+                    <div class="text-2xl font-bold text-green-600">JWT</div>
+                    <div class="text-gray-700">Authentication</div>
+                </div>
+                <div class="bg-red-50 p-4 rounded-lg">
+                    <div class="text-2xl font-bold text-red-600">6</div>
+                    <div class="text-gray-700">Real Athletes</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Base URL -->
+        <div class="bg-white rounded-lg shadow-md p-8 mb-8">
+            <h3 class="text-xl font-bold text-gray-900 mb-4">Base URL</h3>
+            <code>http://localhost:8000/api</code>
+            <h3 class="text-xl font-bold text-gray-900 mt-8 mb-4">Authentication</h3>
+            <p class="text-gray-700 mb-4">Use JWT Token in Authorization header:</p>
+            <pre>Authorization: Bearer your_access_token</pre>
+            <h4 class="font-bold text-gray-900 mt-4 mb-2">Get Token:</h4>
+            <pre>POST /api/auth/token/
+{
+    "username": "messi",
+    "password": "messi123"
+}</pre>
+        </div>
+
+        <!-- Endpoints -->
+        <div class="space-y-6">
+            <!-- TWEETS SECTION -->
+            <h3 class="text-2xl font-bold text-gray-900 mt-12 mb-6">📝 Tweets</h3>
+
+            <!-- List Tweets -->
+            <div class="endpoint-get p-6 rounded-lg">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="flex items-center gap-3">
+                        <span class="method-get">GET</span>
+                        <code>/tweets/</code>
+                    </div>
+                    <span class="text-gray-600">List all tweets</span>
+                </div>
+                <p class="text-gray-700 text-sm mb-3">Get paginated list of all tweets (20 per page)</p>
+                <div class="bg-white p-3 rounded mt-3">
+                    <div class="font-bold text-gray-900 mb-2">Response 200:</div>
+                    <pre>{
+    "count": 45,
+    "next": "http://localhost:8000/api/tweets/?page=2",
+    "results": [
+        {
+            "id": 1,
+            "author": {"id": 1, "username": "messi"},
+            "content": "Goal!",
+            "likes_count": 150,
+            "retweets_count": 45,
+            "replies_count": 12,
+            "created_at": "2026-06-16T12:00:00Z"
+        }
+    ]
+}</pre>
+                </div>
+            </div>
+
+            <!-- Create Tweet -->
+            <div class="endpoint-post p-6 rounded-lg">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="flex items-center gap-3">
+                        <span class="method-post">POST</span>
+                        <code>/tweets/</code>
+                    </div>
+                    <span class="text-gray-600">Create a new tweet</span>
+                </div>
+                <p class="text-gray-700 text-sm mb-3">Requires authentication</p>
+                <div class="bg-white p-3 rounded mt-3">
+                    <div class="font-bold text-gray-900 mb-2">Request Body:</div>
+                    <pre>{
+    "content": "Amazing goal! #football"
+}</pre>
+                    <div class="font-bold text-gray-900 mb-2 mt-4">Response 201:</div>
+                    <pre>{
+    "id": 46,
+    "author": {"id": 1, "username": "messi"},
+    "content": "Amazing goal! #football",
+    "likes_count": 0,
+    "retweets_count": 0,
+    "replies_count": 0,
+    "created_at": "2026-06-18T09:00:00Z"
+}</pre>
+                </div>
+            </div>
+
+            <!-- Tweet Detail -->
+            <div class="endpoint-get p-6 rounded-lg">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="flex items-center gap-3">
+                        <span class="method-get">GET</span>
+                        <code>/tweets/{id}/</code>
+                    </div>
+                    <span class="text-gray-600">Get tweet by ID</span>
+                </div>
+                <div class="bg-white p-3 rounded mt-3">
+                    <div class="font-bold text-gray-900 mb-2">Example: /tweets/1/</div>
+                    <pre>{
+    "id": 1,
+    "author": {"id": 1, "username": "messi", "profile": {...}},
+    "content": "Goal!",
+    "likes_count": 150,
+    "liked_by": [2, 3, 4],
+    "retweeted_by": [5, 6],
+    "replies": [
+        {"id": 2, "author": {...}, "content": "Amazing!"}
+    ]
+}</pre>
+                </div>
+            </div>
+
+            <!-- Like Tweet -->
+            <div class="endpoint-post p-6 rounded-lg">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="flex items-center gap-3">
+                        <span class="method-post">POST</span>
+                        <code>/tweets/{id}/like/</code>
+                    </div>
+                    <span class="text-gray-600">Like a tweet</span>
+                </div>
+                <p class="text-gray-700 text-sm mb-3">Requires authentication</p>
+                <div class="bg-white p-3 rounded mt-3">
+                    <div class="font-bold text-gray-900 mb-2">Example: /tweets/1/like/</div>
+                    <pre>Response 200:
+{
+    "likes_count": 151,
+    "liked": true
+}</pre>
+                </div>
+            </div>
+
+            <!-- Retweet -->
+            <div class="endpoint-post p-6 rounded-lg">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="flex items-center gap-3">
+                        <span class="method-post">POST</span>
+                        <code>/tweets/{id}/retweet/</code>
+                    </div>
+                    <span class="text-gray-600">Retweet a post</span>
+                </div>
+                <p class="text-gray-700 text-sm mb-3">Requires authentication</p>
+            </div>
+
+            <!-- USERS SECTION -->
+            <h3 class="text-2xl font-bold text-gray-900 mt-12 mb-6">👤 Users & Profiles</h3>
+
+            <!-- List Users -->
+            <div class="endpoint-get p-6 rounded-lg">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="flex items-center gap-3">
+                        <span class="method-get">GET</span>
+                        <code>/users/</code>
+                    </div>
+                    <span class="text-gray-600">List all users</span>
+                </div>
+                <div class="bg-white p-3 rounded mt-3">
+                    <pre>{
+    "count": 10,
+    "results": [
+        {
+            "id": 1,
+            "username": "messi",
+            "first_name": "Lionel",
+            "email": "messi@grind.fr",
+            "profile": {
+                "bio": "GOAT",
+                "location": "Barcelona",
+                "followers_count": 1000,
+                "following_count": 500,
+                "tweets_count": 45
+            }
+        }
+    ]
+}</pre>
+                </div>
+            </div>
+
+            <!-- User Detail -->
+            <div class="endpoint-get p-6 rounded-lg">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="flex items-center gap-3">
+                        <span class="method-get">GET</span>
+                        <code>/users/{id}/</code>
+                    </div>
+                    <span class="text-gray-600">Get user profile</span>
+                </div>
+                <div class="bg-white p-3 rounded mt-3">
+                    <div class="font-bold text-gray-900 mb-2">Example: /users/1/</div>
+                    <pre>{
+    "id": 1,
+    "username": "messi",
+    "first_name": "Lionel",
+    "profile": {
+        "bio": "GOAT",
+        "location": "Barcelona",
+        "website": "https://messi.com",
+        "followers_count": 1000,
+        "following_count": 500,
+        "tweets": [1, 2, 3, ...]
+    }
+}</pre>
+                </div>
+            </div>
+
+            <!-- Follow User -->
+            <div class="endpoint-post p-6 rounded-lg">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="flex items-center gap-3">
+                        <span class="method-post">POST</span>
+                        <code>/users/{id}/follow/</code>
+                    </div>
+                    <span class="text-gray-600">Follow a user</span>
+                </div>
+                <p class="text-gray-700 text-sm mb-3">Requires authentication</p>
+            </div>
+
+            <!-- MESSAGES SECTION -->
+            <h3 class="text-2xl font-bold text-gray-900 mt-12 mb-6">💬 Messages</h3>
+
+            <!-- List Conversations -->
+            <div class="endpoint-get p-6 rounded-lg">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="flex items-center gap-3">
+                        <span class="method-get">GET</span>
+                        <code>/messages/</code>
+                    </div>
+                    <span class="text-gray-600">List all conversations</span>
+                </div>
+                <p class="text-gray-700 text-sm mb-3">Requires authentication - Shows only followed users</p>
+                <div class="bg-white p-3 rounded mt-3">
+                    <pre>{
+    "count": 5,
+    "results": [
+        {
+            "id": 1,
+            "sender": {"id": 1, "username": "messi"},
+            "recipient": {"id": 2, "username": "ronaldo"},
+            "content": "Hey!",
+            "is_read": true,
+            "created_at": "2026-06-18T09:00:00Z"
+        }
+    ]
+}</pre>
+                </div>
+            </div>
+
+            <!-- Send Message -->
+            <div class="endpoint-post p-6 rounded-lg">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="flex items-center gap-3">
+                        <span class="method-post">POST</span>
+                        <code>/messages/</code>
+                    </div>
+                    <span class="text-gray-600">Send a message</span>
+                </div>
+                <p class="text-gray-700 text-sm mb-3">Requires authentication</p>
+                <div class="bg-white p-3 rounded mt-3">
+                    <div class="font-bold text-gray-900 mb-2">Request Body:</div>
+                    <pre>{
+    "recipient_id": 2,
+    "content": "Hey, how are you?"
+}</pre>
+                </div>
+            </div>
+
+            <!-- Get Conversation -->
+            <div class="endpoint-get p-6 rounded-lg">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="flex items-center gap-3">
+                        <span class="method-get">GET</span>
+                        <code>/messages/{username}/</code>
+                    </div>
+                    <span class="text-gray-600">Get conversation with user</span>
+                </div>
+                <p class="text-gray-700 text-sm mb-3">Requires authentication - Can message any user</p>
+            </div>
+
+            <!-- INTERACTIONS SECTION -->
+            <h3 class="text-2xl font-bold text-gray-900 mt-12 mb-6">⭐ Interactions</h3>
+
+            <!-- Bookmark -->
+            <div class="endpoint-post p-6 rounded-lg">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="flex items-center gap-3">
+                        <span class="method-post">POST</span>
+                        <code>/tweets/{id}/bookmark/</code>
+                    </div>
+                    <span class="text-gray-600">Bookmark a tweet</span>
+                </div>
+                <p class="text-gray-700 text-sm mb-3">Requires authentication</p>
+            </div>
+
+            <!-- List Bookmarks -->
+            <div class="endpoint-get p-6 rounded-lg">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="flex items-center gap-3">
+                        <span class="method-get">GET</span>
+                        <code>/bookmarks/</code>
+                    </div>
+                    <span class="text-gray-600">Get user's bookmarks</span>
+                </div>
+                <p class="text-gray-700 text-sm mb-3">Requires authentication</p>
+            </div>
+
+            <!-- DISCOVERY SECTION -->
+            <h3 class="text-2xl font-bold text-gray-900 mt-12 mb-6">🔍 Discovery</h3>
+
+            <!-- Trending Hashtags -->
+            <div class="endpoint-get p-6 rounded-lg">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="flex items-center gap-3">
+                        <span class="method-get">GET</span>
+                        <code>/hashtags/</code>
+                    </div>
+                    <span class="text-gray-600">Get trending hashtags</span>
+                </div>
+                <div class="bg-white p-3 rounded mt-3">
+                    <pre>{
+    "count": 8,
+    "results": [
+        {"id": 1, "name": "football", "tweets_count": 45},
+        {"id": 2, "name": "sports", "tweets_count": 32},
+        ...
+    ]
+}</pre>
+                </div>
+            </div>
+
+            <!-- Notifications -->
+            <div class="endpoint-get p-6 rounded-lg">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="flex items-center gap-3">
+                        <span class="method-get">GET</span>
+                        <code>/notifications/</code>
+                    </div>
+                    <span class="text-gray-600">Get user notifications</span>
+                </div>
+                <p class="text-gray-700 text-sm mb-3">Requires authentication</p>
+            </div>
+        </div>
+
+        <!-- Error Codes -->
+        <div class="bg-white rounded-lg shadow-md p-8 mt-12 mb-8">
+            <h3 class="text-2xl font-bold text-gray-900 mb-6">⚠️ Error Codes</h3>
+            <div class="space-y-4">
+                <div class="border-l-4 border-red-500 bg-red-50 p-4">
+                    <div class="font-bold text-gray-900">400 - Bad Request</div>
+                    <p class="text-gray-700 text-sm">Invalid request data or parameters</p>
+                </div>
+                <div class="border-l-4 border-red-500 bg-red-50 p-4">
+                    <div class="font-bold text-gray-900">401 - Unauthorized</div>
+                    <p class="text-gray-700 text-sm">Missing or invalid authentication token</p>
+                </div>
+                <div class="border-l-4 border-red-500 bg-red-50 p-4">
+                    <div class="font-bold text-gray-900">403 - Forbidden</div>
+                    <p class="text-gray-700 text-sm">Authenticated but not authorized to perform action</p>
+                </div>
+                <div class="border-l-4 border-red-500 bg-red-50 p-4">
+                    <div class="font-bold text-gray-900">404 - Not Found</div>
+                    <p class="text-gray-700 text-sm">Resource not found</p>
+                </div>
+                <div class="border-l-4 border-red-500 bg-red-50 p-4">
+                    <div class="font-bold text-gray-900">500 - Server Error</div>
+                    <p class="text-gray-700 text-sm">Internal server error</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Test Credentials -->
+        <div class="bg-red-50 rounded-lg shadow-md p-8 mb-8">
+            <h3 class="text-2xl font-bold text-gray-900 mb-6">🔓 Test Credentials</h3>
+            <div class="grid grid-cols-3 gap-4">
+                <div>
+                    <div class="font-bold text-gray-900">messi</div>
+                    <code>messi123</code>
+                </div>
+                <div>
+                    <div class="font-bold text-gray-900">ronaldo</div>
+                    <code>ronaldo123</code>
+                </div>
+                <div>
+                    <div class="font-bold text-gray-900">neymar</div>
+                    <code>neymar123</code>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="text-center text-gray-600 py-8">
+            <p>GRIND API Documentation - Sports Social Platform</p>
+            <p class="text-sm">Built with Django REST Framework</p>
+        </div>
+    </div>
+</body>
+</html>

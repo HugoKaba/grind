@@ -41,6 +41,7 @@ INSTALLED_APPS = [
     # Third-party
     'rest_framework',
     'django_filters',
+    'drf_spectacular',
 
     # Local
     'core',
@@ -149,6 +150,18 @@ REST_FRAMEWORK = {
         'rest_framework.filters.SearchFilter',
         'rest_framework.filters.OrderingFilter',
     ),
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+}
+
+# Swagger/OpenAPI Configuration
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'GRIND API',
+    'DESCRIPTION': 'Sports Social Platform REST API',
+    'VERSION': '1.0.0',
+    'SERVE_PERMISSIONS': ['rest_framework.permissions.AllowAny'],
+    'SERVERS': [
+        {'url': 'http://localhost:8000', 'description': 'Development'},
+    ],
 }
 
 # Simple JWT settings
@@ -170,3 +183,8 @@ CACHES = {
         }
     }
 }
+
+# Authentication
+LOGIN_REDIRECT_URL = '/'
+LOGOUT_REDIRECT_URL = '/accounts/login/'
+
