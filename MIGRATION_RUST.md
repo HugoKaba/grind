@@ -301,9 +301,13 @@ Ajouts : `.env.example` (committé, sans secret) comme référence. `.env` reste
 
 Un crate par couche → la règle de dépendance est **imposée par le compilateur** (le crate `domain` n'a aucune dépendance framework, donc impossible d'y importer Axum/SeaORM par erreur).
 
+> Le workspace Rust est **à la racine du repo** ; l'ancien projet Django est
+> déplacé dans `legacy-django/` (il continue de tourner jusqu'au cutover, puis est retiré).
+
 ```
-grind-rs/
+.  (racine du repo)
 ├── Cargo.toml                     # [workspace]
+├── legacy-django/                 # ⬅ projet Django existant (manage.py, grind/, core/, api/…)
 │
 ├── crates/
 │   ├── domain/                    # ⬅ COUCHE 1 — pur, WASM-safe, zéro framework

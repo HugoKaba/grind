@@ -17,7 +17,7 @@ class Command(BaseCommand):
 
         # Create realistic sports athletes
         athletes_data = [
-            {'username': 'messi', 'first_name': 'Lionel', 'email': 'messi@playthread.com'},
+            {'username': 'messi', 'first_name': 'Lionel', 'email': 'messi@playthread.com',""},
             {'username': 'ronaldo', 'first_name': 'Cristiano', 'email': 'ronaldo@playthread.com'},
             {'username': 'mbappe', 'first_name': 'Kylian', 'email': 'mbappe@playthread.com'},
             {'username': 'haaland', 'first_name': 'Erling', 'email': 'haaland@playthread.com'},

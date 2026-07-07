@@ -1,0 +1,19 @@
+[project]
+name = "grind"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "django==5.0.14",
+    "django-filter==24.1",
+    "django-redis==5.4.0",
+    "djangorestframework==3.14.0",
+    "djangorestframework-simplejwt==5.5.1",
+    "drf-spectacular==0.27.0",
+    "pillow>=10.0",
+    "psycopg2-binary==2.9.9",
+    "python-decouple==3.8",
+    "python-dotenv==1.0.0",
+    "setuptools>=65.0",
+]

@@ -1,4 +1,9 @@
-# Python
+# --- Rust (workspace à la racine) ---
+/target
+**/*.rs.bk
+Cargo.lock.bak
+
+# Python (legacy-django/)
 __pycache__/
 *.py[cod]
 *$py.class
