@@ -1,0 +1,18 @@
+[package]
+name = "grind-infrastructure"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[dependencies]
+grind-domain = { path = "../domain" }
+grind-application = { path = "../application" }
+thiserror.workspace = true
+
+# --- auth spike ---
+argon2 = { workspace = true }
+pbkdf2 = { workspace = true }
+sha2 = { workspace = true }
+base64 = { workspace = true }
+subtle = { workspace = true }
+rand_core = { version = "0.6", features = ["getrandom"] }
