@@ -11,6 +11,8 @@ use rand_core::OsRng;
 use sha2::Sha256;
 use subtle::ConstantTimeEq;
 
+use grind_application::{AppError, PasswordCheck, PasswordHasher as PasswordHasherPort};
+
 #[derive(Debug, thiserror::Error)]
 pub enum HashError {
     #[error("unknown password hash format")]
@@ -99,6 +101,23 @@ impl PasswordService {
         } else {
             Err(HashError::UnknownFormat)
         }
+    }
+}
+
+/// Adaptateur : `PasswordService` implémente le port `PasswordHasher` de l'application.
+impl PasswordHasherPort for PasswordService {
+    fn verify(&self, password: &str, stored: &str) -> Result<PasswordCheck, AppError> {
+        let outcome =
+            PasswordService::verify(self, password, stored).map_err(|e| AppError::Auth(e.to_string()))?;
+        Ok(match outcome {
+            VerifyOutcome::Invalid => PasswordCheck::Invalid,
+            VerifyOutcome::Valid => PasswordCheck::Valid,
+            VerifyOutcome::ValidNeedsRehash => PasswordCheck::ValidNeedsRehash,
+        })
+    }
+
+    fn hash(&self, password: &str) -> Result<String, AppError> {
+        PasswordService::hash(self, password).map_err(|e| AppError::Auth(e.to_string()))
     }
 }
 

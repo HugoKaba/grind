@@ -5,8 +5,8 @@ members = [
     "crates/application",
     "crates/shared",
     "crates/infrastructure",
+    "app",
 ]
-# `app/` (Leptos + Axum binary) is added in Phase 4 — it needs `cargo-leptos`.
 
 [workspace.package]
 edition = "2021"

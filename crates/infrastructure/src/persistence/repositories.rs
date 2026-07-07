@@ -7,14 +7,17 @@ use chrono::Utc;
 use sea_orm::sea_query::Expr;
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, ConnectionTrait, DatabaseConnection, DbErr, EntityTrait,
-    QueryFilter, Set, TransactionTrait,
+    QueryFilter, QueryOrder, QuerySelect, Set, TransactionTrait,
 };
 
-use grind_application::{FollowRepository, LikeRepository, LikeToggle, PostRepository, RepoError};
+use grind_application::{
+    AuthUserRecord, FeedItem, FeedRepository, FollowRepository, LikeRepository, LikeToggle,
+    PostRepository, RepoError, UserRepository,
+};
 use grind_domain::entities::{Follow, MatchId, Post, PostId, SportId, TeamId, UserId};
 use grind_domain::value_objects::PostContent;
 
-use super::entities::{follow, post, post_like};
+use super::entities::{follow, post, post_like, users};
 
 fn db_err(e: DbErr) -> RepoError {
     RepoError::Backend(e.to_string())
@@ -228,6 +231,101 @@ impl LikeRepository for SeaOrmLikeRepository {
         let count = likes_count(&txn, post_id.0).await?;
         txn.commit().await.map_err(db_err)?;
         Ok(LikeToggle { changed, likes_count: count })
+    }
+}
+
+// ---------------------------------------------------------------------------
+
+pub struct SeaOrmUserRepository {
+    db: DatabaseConnection,
+}
+
+impl SeaOrmUserRepository {
+    pub fn new(db: DatabaseConnection) -> Self {
+        Self { db }
+    }
+}
+
+#[async_trait]
+impl UserRepository for SeaOrmUserRepository {
+    async fn by_username(&self, username: &str) -> Result<Option<AuthUserRecord>, RepoError> {
+        let found = users::Entity::find()
+            .filter(users::Column::Username.eq(username))
+            .one(&self.db)
+            .await
+            .map_err(db_err)?;
+        Ok(found.map(|u| AuthUserRecord {
+            id: u.id,
+            username: u.username,
+            password_hash: u.password,
+        }))
+    }
+
+    async fn update_password(&self, user_id: i64, new_hash: &str) -> Result<(), RepoError> {
+        users::Entity::update_many()
+            .col_expr(users::Column::Password, Expr::value(new_hash.to_owned()))
+            .filter(users::Column::Id.eq(user_id))
+            .exec(&self.db)
+            .await
+            .map_err(db_err)?;
+        Ok(())
+    }
+}
+
+// ---------------------------------------------------------------------------
+
+pub struct SeaOrmFeedRepository {
+    db: DatabaseConnection,
+}
+
+impl SeaOrmFeedRepository {
+    pub fn new(db: DatabaseConnection) -> Self {
+        Self { db }
+    }
+}
+
+#[async_trait]
+impl FeedRepository for SeaOrmFeedRepository {
+    async fn recent(&self, limit: u64) -> Result<Vec<FeedItem>, RepoError> {
+        // 1) posts racines récents
+        let posts = post::Entity::find()
+            .filter(post::Column::ParentId.is_null())
+            .order_by_desc(post::Column::CreatedAt)
+            .limit(limit)
+            .all(&self.db)
+            .await
+            .map_err(db_err)?;
+
+        if posts.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        // 2) auteurs en un seul aller-retour (évite le N+1)
+        let author_ids: Vec<i64> = posts.iter().map(|p| p.author_id).collect();
+        let authors = users::Entity::find()
+            .filter(users::Column::Id.is_in(author_ids))
+            .all(&self.db)
+            .await
+            .map_err(db_err)?;
+
+        let items = posts
+            .into_iter()
+            .map(|p| {
+                let author = authors.iter().find(|u| u.id == p.author_id);
+                FeedItem {
+                    id: p.id,
+                    author_username: author.map(|u| u.username.clone()).unwrap_or_default(),
+                    author_display: author.map(|u| u.display_name.clone()).unwrap_or_default(),
+                    content: p.content,
+                    likes_count: p.likes_count,
+                    reposts_count: p.reposts_count,
+                    replies_count: p.replies_count,
+                    created_at: p.created_at.to_rfc3339(),
+                }
+            })
+            .collect();
+
+        Ok(items)
     }
 }
 

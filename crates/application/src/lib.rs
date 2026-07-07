@@ -26,6 +26,8 @@ pub enum AppError {
     Domain(#[from] DomainError),
     #[error(transparent)]
     Repo(#[from] RepoError),
+    #[error("auth error: {0}")]
+    Auth(String),
 }
 
 // ---------------------------------------------------------------------------
@@ -65,16 +67,63 @@ pub trait LikeRepository: Send + Sync {
     async fn unlike(&self, user: UserId, post: PostId) -> Result<LikeToggle, RepoError>;
 }
 
+/// Enregistrement minimal pour l'authentification.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AuthUserRecord {
+    pub id: i64,
+    pub username: String,
+    pub password_hash: String,
+}
+
+#[async_trait]
+pub trait UserRepository: Send + Sync {
+    async fn by_username(&self, username: &str) -> Result<Option<AuthUserRecord>, RepoError>;
+    async fn update_password(&self, user_id: i64, new_hash: &str) -> Result<(), RepoError>;
+}
+
+/// Résultat de vérification d'un mot de passe (port infra, cf. auth hybride).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PasswordCheck {
+    Invalid,
+    Valid,
+    /// Correct mais hash legacy (Django PBKDF2) → à ré-écrire en argon2.
+    ValidNeedsRehash,
+}
+
+pub trait PasswordHasher: Send + Sync {
+    fn verify(&self, password: &str, stored: &str) -> Result<PasswordCheck, AppError>;
+    fn hash(&self, password: &str) -> Result<String, AppError>;
+}
+
+/// Ligne de fil d'actualité (read model dénormalisé pour la présentation).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FeedItem {
+    pub id: i64,
+    pub author_username: String,
+    pub author_display: String,
+    pub content: String,
+    pub likes_count: i64,
+    pub reposts_count: i64,
+    pub replies_count: i64,
+    pub created_at: String,
+}
+
+#[async_trait]
+pub trait FeedRepository: Send + Sync {
+    /// Posts récents (hors réponses), joints à leur auteur, du plus récent au plus ancien.
+    async fn recent(&self, limit: u64) -> Result<Vec<FeedItem>, RepoError>;
+}
+
 // ---------------------------------------------------------------------------
 // Use cases — orchestrent domaine + ports. Zéro dépendance framework.
 // ---------------------------------------------------------------------------
 
 /// Crée un post : valide le contenu (invariant domaine) puis persiste.
-pub struct CreatePost<'a, R: PostRepository> {
+pub struct CreatePost<'a, R: PostRepository + ?Sized> {
     repo: &'a R,
 }
 
-impl<'a, R: PostRepository> CreatePost<'a, R> {
+impl<'a, R: PostRepository + ?Sized> CreatePost<'a, R> {
     pub fn new(repo: &'a R) -> Self {
         Self { repo }
     }
@@ -92,11 +141,11 @@ impl<'a, R: PostRepository> CreatePost<'a, R> {
 }
 
 /// Fait suivre un utilisateur par un autre (idempotent, refuse l'auto-follow).
-pub struct FollowUser<'a, R: FollowRepository> {
+pub struct FollowUser<'a, R: FollowRepository + ?Sized> {
     repo: &'a R,
 }
 
-impl<'a, R: FollowRepository> FollowUser<'a, R> {
+impl<'a, R: FollowRepository + ?Sized> FollowUser<'a, R> {
     pub fn new(repo: &'a R) -> Self {
         Self { repo }
     }
@@ -113,11 +162,11 @@ impl<'a, R: FollowRepository> FollowUser<'a, R> {
 }
 
 /// Like / unlike un post. La cohérence du compteur est garantie par le repo.
-pub struct ToggleLike<'a, R: LikeRepository> {
+pub struct ToggleLike<'a, R: LikeRepository + ?Sized> {
     repo: &'a R,
 }
 
-impl<'a, R: LikeRepository> ToggleLike<'a, R> {
+impl<'a, R: LikeRepository + ?Sized> ToggleLike<'a, R> {
     pub fn new(repo: &'a R) -> Self {
         Self { repo }
     }
@@ -128,6 +177,55 @@ impl<'a, R: LikeRepository> ToggleLike<'a, R> {
 
     pub async fn unlike(&self, user: UserId, post: PostId) -> Result<LikeToggle, AppError> {
         Ok(self.repo.unlike(user, post).await?)
+    }
+}
+
+/// Authentifie un utilisateur (auth **hybride** : vérif du hash, puis re-hash
+/// argon2 transparent si le hash stocké est un legacy Django PBKDF2).
+pub struct Login<'a, U: UserRepository + ?Sized, H: PasswordHasher + ?Sized> {
+    users: &'a U,
+    hasher: &'a H,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LoginOutcome {
+    pub user_id: i64,
+    pub username: String,
+}
+
+impl<'a, U: UserRepository + ?Sized, H: PasswordHasher + ?Sized> Login<'a, U, H> {
+    pub fn new(users: &'a U, hasher: &'a H) -> Self {
+        Self { users, hasher }
+    }
+
+    /// `Ok(None)` = identifiants invalides (utilisateur inconnu ou mauvais mot de passe).
+    pub async fn execute(
+        &self,
+        username: &str,
+        password: &str,
+    ) -> Result<Option<LoginOutcome>, AppError> {
+        let Some(record) = self.users.by_username(username).await? else {
+            return Ok(None);
+        };
+
+        match self.hasher.verify(password, &record.password_hash)? {
+            PasswordCheck::Invalid => Ok(None),
+            PasswordCheck::Valid => Ok(Some(LoginOutcome {
+                user_id: record.id,
+                username: record.username,
+            })),
+            PasswordCheck::ValidNeedsRehash => {
+                // Modernisation transparente : on ré-écrit en argon2. Best-effort :
+                // un échec de re-hash ne doit pas empêcher la connexion.
+                if let Ok(new_hash) = self.hasher.hash(password) {
+                    let _ = self.users.update_password(record.id, &new_hash).await;
+                }
+                Ok(Some(LoginOutcome {
+                    user_id: record.id,
+                    username: record.username,
+                }))
+            }
+        }
     }
 }
 
@@ -264,5 +362,88 @@ mod tests {
         // unlike
         let r = uc.unlike(UserId(1), post).await.unwrap();
         assert_eq!(r, LikeToggle { changed: true, likes_count: 1 });
+    }
+
+    struct InMemoryUsers {
+        record: Option<AuthUserRecord>,
+        updated_to: Mutex<Option<String>>,
+    }
+
+    #[async_trait]
+    impl UserRepository for InMemoryUsers {
+        async fn by_username(&self, username: &str) -> Result<Option<AuthUserRecord>, RepoError> {
+            Ok(self
+                .record
+                .clone()
+                .filter(|r| r.username == username))
+        }
+        async fn update_password(&self, _user_id: i64, new_hash: &str) -> Result<(), RepoError> {
+            *self.updated_to.lock().unwrap() = Some(new_hash.to_owned());
+            Ok(())
+        }
+    }
+
+    /// Hasher factice : le "hash stocké" encode directement l'issue attendue.
+    struct FakeHasher;
+    impl PasswordHasher for FakeHasher {
+        fn verify(&self, _password: &str, stored: &str) -> Result<PasswordCheck, AppError> {
+            Ok(match stored {
+                "VALID" => PasswordCheck::Valid,
+                "LEGACY" => PasswordCheck::ValidNeedsRehash,
+                _ => PasswordCheck::Invalid,
+            })
+        }
+        fn hash(&self, _password: &str) -> Result<String, AppError> {
+            Ok("$argon2id$rehashed".to_owned())
+        }
+    }
+
+    fn user(hash: &str) -> InMemoryUsers {
+        InMemoryUsers {
+            record: Some(AuthUserRecord { id: 1, username: "messi".into(), password_hash: hash.into() }),
+            updated_to: Mutex::new(None),
+        }
+    }
+
+    #[tokio::test]
+    async fn login_unknown_user_returns_none() {
+        let users = InMemoryUsers { record: None, updated_to: Mutex::new(None) };
+        let hasher = FakeHasher;
+        let out = Login::new(&users, &hasher).execute("ghost", "x").await.unwrap();
+        assert_eq!(out, None);
+    }
+
+    #[tokio::test]
+    async fn login_wrong_password_returns_none() {
+        let users = user("VALID");
+        let hasher = FakeHasher;
+        let out = Login::new(&users, &hasher).execute("messi", "wrong").await.unwrap();
+        // stored "VALID" always verifies here, so simulate wrong via "INVALID" hash instead:
+        assert!(out.is_some());
+        let users = user("INVALID");
+        let out = Login::new(&users, &hasher).execute("messi", "whatever").await.unwrap();
+        assert_eq!(out, None);
+    }
+
+    #[tokio::test]
+    async fn login_argon2_ok_without_rehash() {
+        let users = user("VALID");
+        let hasher = FakeHasher;
+        let out = Login::new(&users, &hasher).execute("messi", "grind1234").await.unwrap();
+        assert_eq!(out.unwrap().user_id, 1);
+        assert!(users.updated_to.lock().unwrap().is_none(), "pas de re-hash attendu");
+    }
+
+    #[tokio::test]
+    async fn login_legacy_hash_triggers_rehash() {
+        let users = user("LEGACY");
+        let hasher = FakeHasher;
+        let out = Login::new(&users, &hasher).execute("messi", "grind1234").await.unwrap();
+        assert_eq!(out.unwrap().username, "messi");
+        assert_eq!(
+            users.updated_to.lock().unwrap().as_deref(),
+            Some("$argon2id$rehashed"),
+            "le hash legacy doit être ré-écrit en argon2"
+        );
     }
 }

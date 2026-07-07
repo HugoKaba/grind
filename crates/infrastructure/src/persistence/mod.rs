@@ -5,10 +5,15 @@ pub mod migration;
 pub mod repositories;
 pub mod seed;
 
-use sea_orm::{ConnectOptions, Database, DatabaseConnection, DbErr};
+use sea_orm::{ConnectOptions, Database, DbErr};
 use sea_orm_migration::MigratorTrait;
 
 pub use migration::Migrator;
+pub use repositories::{
+    SeaOrmFeedRepository, SeaOrmFollowRepository, SeaOrmLikeRepository, SeaOrmPostRepository,
+    SeaOrmUserRepository,
+};
+pub use sea_orm::DatabaseConnection;
 
 /// Ouvre une connexion et applique les migrations. `url` ex :
 /// `postgres://user:pass@host/db` ou `sqlite::memory:`.
