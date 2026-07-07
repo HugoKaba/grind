@@ -112,18 +112,31 @@ pub struct FeedItem {
     pub reposts_count: i64,
     pub replies_count: i64,
     pub created_at: String,
+    /// `true` si l'observateur (`viewer`) a liké ce post. `false` si anonyme.
+    pub liked_by_me: bool,
 }
 
 #[async_trait]
 pub trait FeedRepository: Send + Sync {
     /// Posts récents (hors réponses), joints à leur auteur, du plus récent au plus ancien.
-    async fn recent(&self, limit: u64) -> Result<Vec<FeedItem>, RepoError>;
+    /// `viewer` = observateur courant (`None` si anonyme) → renseigne `liked_by_me`.
+    async fn recent(&self, viewer: Option<UserId>, limit: u64) -> Result<Vec<FeedItem>, RepoError>;
     /// Un post par id (page détail).
-    async fn by_id(&self, id: i64) -> Result<Option<FeedItem>, RepoError>;
+    async fn by_id(&self, viewer: Option<UserId>, id: i64) -> Result<Option<FeedItem>, RepoError>;
     /// Réponses à un post (thread).
-    async fn replies(&self, parent_id: i64, limit: u64) -> Result<Vec<FeedItem>, RepoError>;
+    async fn replies(
+        &self,
+        viewer: Option<UserId>,
+        parent_id: i64,
+        limit: u64,
+    ) -> Result<Vec<FeedItem>, RepoError>;
     /// Posts d'un auteur (page profil).
-    async fn by_author(&self, username: &str, limit: u64) -> Result<Vec<FeedItem>, RepoError>;
+    async fn by_author(
+        &self,
+        viewer: Option<UserId>,
+        username: &str,
+        limit: u64,
+    ) -> Result<Vec<FeedItem>, RepoError>;
 }
 
 // ---------------------------------------------------------------------------

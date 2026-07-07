@@ -192,6 +192,30 @@ mod tests {
         assert!(body.contains("\"liked\":true"), "attendu liked=true, reçu: {body}");
         assert!(body.contains("\"likes_count\":1"), "attendu likes_count=1, reçu: {body}");
 
+        // get_timeline vu par messi (qui vient de liker id=1) → liked_by_me=true présent
+        let resp = app
+            .clone()
+            .oneshot(form("/api/get_timeline", Some(&messi), ""))
+            .await
+            .unwrap();
+        let body = body_string(resp).await;
+        assert!(
+            body.contains("\"liked_by_me\":true"),
+            "messi doit voir son propre like: {body}"
+        );
+
+        // get_timeline anonyme → aucun liked_by_me=true (viewer-aware)
+        let resp = app
+            .clone()
+            .oneshot(form("/api/get_timeline", None, ""))
+            .await
+            .unwrap();
+        let body = body_string(resp).await;
+        assert!(
+            !body.contains("\"liked_by_me\":true"),
+            "un anonyme ne doit voir aucun like personnel: {body}"
+        );
+
         // re-toggle (messi) → unlike : liked=false, count=0
         let resp = app
             .clone()

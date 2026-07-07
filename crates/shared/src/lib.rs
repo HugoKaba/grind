@@ -65,4 +65,6 @@ pub struct FeedItemDto {
     pub reposts_count: i64,
     pub replies_count: i64,
     pub created_at: String,
+    /// `true` si l'utilisateur courant a liké ce post (`false` si anonyme).
+    pub liked_by_me: bool,
 }

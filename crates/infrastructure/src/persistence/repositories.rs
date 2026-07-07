@@ -303,20 +303,43 @@ impl SeaOrmFeedRepository {
     }
 }
 
-/// Joint une liste de posts à leurs auteurs en **une** requête (évite le N+1).
+/// Set des `post_id` likés par `viewer` parmi `post_ids`, en **une** requête.
+/// Vide si `viewer` est anonyme (`None`). Sert à renseigner `liked_by_me` sans N+1.
+async fn liked_set(
+    db: &DatabaseConnection,
+    viewer: Option<UserId>,
+    post_ids: &[i64],
+) -> Result<std::collections::HashSet<i64>, RepoError> {
+    let Some(viewer) = viewer else {
+        return Ok(std::collections::HashSet::new());
+    };
+    let rows = post_like::Entity::find()
+        .filter(post_like::Column::UserId.eq(viewer.0))
+        .filter(post_like::Column::PostId.is_in(post_ids.to_vec()))
+        .all(db)
+        .await
+        .map_err(db_err)?;
+    Ok(rows.into_iter().map(|r| r.post_id).collect())
+}
+
+/// Joint une liste de posts à leurs auteurs **et** à l'état de like de l'observateur,
+/// en **deux** requêtes bornées (auteurs + likes) — pas de N+1.
 async fn join_authors(
     db: &DatabaseConnection,
+    viewer: Option<UserId>,
     posts: Vec<post::Model>,
 ) -> Result<Vec<FeedItem>, RepoError> {
     if posts.is_empty() {
         return Ok(Vec::new());
     }
     let author_ids: Vec<i64> = posts.iter().map(|p| p.author_id).collect();
+    let post_ids: Vec<i64> = posts.iter().map(|p| p.id).collect();
     let authors = users::Entity::find()
         .filter(users::Column::Id.is_in(author_ids))
         .all(db)
         .await
         .map_err(db_err)?;
+    let liked = liked_set(db, viewer, &post_ids).await?;
 
     Ok(posts
         .into_iter()
@@ -331,6 +354,7 @@ async fn join_authors(
                 reposts_count: p.reposts_count,
                 replies_count: p.replies_count,
                 created_at: p.created_at.to_rfc3339(),
+                liked_by_me: liked.contains(&p.id),
             }
         })
         .collect())
@@ -338,7 +362,7 @@ async fn join_authors(
 
 #[async_trait]
 impl FeedRepository for SeaOrmFeedRepository {
-    async fn recent(&self, limit: u64) -> Result<Vec<FeedItem>, RepoError> {
+    async fn recent(&self, viewer: Option<UserId>, limit: u64) -> Result<Vec<FeedItem>, RepoError> {
         let posts = post::Entity::find()
             .filter(post::Column::ParentId.is_null())
             .order_by_desc(post::Column::CreatedAt)
@@ -346,17 +370,22 @@ impl FeedRepository for SeaOrmFeedRepository {
             .all(&self.db)
             .await
             .map_err(db_err)?;
-        join_authors(&self.db, posts).await
+        join_authors(&self.db, viewer, posts).await
     }
 
-    async fn by_id(&self, id: i64) -> Result<Option<FeedItem>, RepoError> {
+    async fn by_id(&self, viewer: Option<UserId>, id: i64) -> Result<Option<FeedItem>, RepoError> {
         let Some(p) = post::Entity::find_by_id(id).one(&self.db).await.map_err(db_err)? else {
             return Ok(None);
         };
-        Ok(join_authors(&self.db, vec![p]).await?.into_iter().next())
+        Ok(join_authors(&self.db, viewer, vec![p]).await?.into_iter().next())
     }
 
-    async fn replies(&self, parent_id: i64, limit: u64) -> Result<Vec<FeedItem>, RepoError> {
+    async fn replies(
+        &self,
+        viewer: Option<UserId>,
+        parent_id: i64,
+        limit: u64,
+    ) -> Result<Vec<FeedItem>, RepoError> {
         let posts = post::Entity::find()
             .filter(post::Column::ParentId.eq(parent_id))
             .order_by_asc(post::Column::CreatedAt)
@@ -364,10 +393,15 @@ impl FeedRepository for SeaOrmFeedRepository {
             .all(&self.db)
             .await
             .map_err(db_err)?;
-        join_authors(&self.db, posts).await
+        join_authors(&self.db, viewer, posts).await
     }
 
-    async fn by_author(&self, username: &str, limit: u64) -> Result<Vec<FeedItem>, RepoError> {
+    async fn by_author(
+        &self,
+        viewer: Option<UserId>,
+        username: &str,
+        limit: u64,
+    ) -> Result<Vec<FeedItem>, RepoError> {
         let Some(user) = users::Entity::find()
             .filter(users::Column::Username.eq(username))
             .one(&self.db)
@@ -383,7 +417,7 @@ impl FeedRepository for SeaOrmFeedRepository {
             .all(&self.db)
             .await
             .map_err(db_err)?;
-        join_authors(&self.db, posts).await
+        join_authors(&self.db, viewer, posts).await
     }
 }
 
@@ -430,5 +464,35 @@ mod tests {
         assert!(follows.add(&rel).await.unwrap());
         assert!(!follows.add(&rel).await.unwrap());
         assert!(follows.exists(UserId(1), UserId(2)).await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn feed_liked_by_me_is_viewer_aware() {
+        let db = connect_and_migrate("sqlite::memory:").await.unwrap();
+        seed_reference_and_athletes(&db, &PasswordService::new()).await.unwrap();
+
+        let posts = SeaOrmPostRepository::new(db.clone());
+        let p = posts
+            .insert(UserId(1), &PostContent::new("Golazo!").unwrap(), None)
+            .await
+            .unwrap();
+
+        // ronaldo (2) like le post ; messi (1) non.
+        let likes = SeaOrmLikeRepository::new(db.clone());
+        likes.like(UserId(2), p.id).await.unwrap();
+
+        let feed = SeaOrmFeedRepository::new(db.clone());
+
+        // Vu par ronaldo → liked_by_me = true.
+        let seen = feed.recent(Some(UserId(2)), 10).await.unwrap();
+        assert!(seen.iter().find(|i| i.id == p.id.0).unwrap().liked_by_me);
+
+        // Vu par messi → liked_by_me = false (il n'a pas liké).
+        let seen = feed.recent(Some(UserId(1)), 10).await.unwrap();
+        assert!(!seen.iter().find(|i| i.id == p.id.0).unwrap().liked_by_me);
+
+        // Vu par un anonyme → liked_by_me = false.
+        let seen = feed.recent(None, 10).await.unwrap();
+        assert!(!seen.iter().find(|i| i.id == p.id.0).unwrap().liked_by_me);
     }
 }

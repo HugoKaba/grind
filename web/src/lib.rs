@@ -115,6 +115,8 @@ fn Home() -> impl IntoView {
                                         .into_iter()
                                         .map(|i| {
                                             let id = i.id;
+                                            // Libellé du bouton selon l'état persistant renvoyé par le serveur.
+                                            let label = if i.liked_by_me { "❤ Liké" } else { "🤍 Liker" };
                                             view! {
                                                 <li class="post">
                                                     <strong>"@"{i.author_username}</strong>
@@ -125,7 +127,7 @@ fn Home() -> impl IntoView {
                                                     " "
                                                     <ActionForm action=like>
                                                         <input type="hidden" name="id" value=id />
-                                                        <button type="submit">"❤ Like"</button>
+                                                        <button type="submit">{label}</button>
                                                     </ActionForm>
                                                 </li>
                                             }
@@ -280,18 +282,20 @@ fn to_dto(i: grind_application::FeedItem) -> FeedItemDto {
         reposts_count: i.reposts_count,
         replies_count: i.replies_count,
         created_at: i.created_at,
+        liked_by_me: i.liked_by_me,
     }
 }
 
 /// Server function : lit le fil via le use case/repo réel (context `DomainState`).
+/// L'observateur (optionnel — anonyme accepté) sert à renseigner `liked_by_me`.
 #[server(endpoint = "get_timeline")]
 pub async fn get_timeline() -> Result<Vec<FeedItemDto>, ServerFnError> {
-    let state = use_context::<state::DomainState>()
-        .ok_or_else(|| ServerFnError::new("DomainState absent du context"))?;
+    let state = domain_state()?;
+    let viewer = optional_viewer(&state).await;
 
     let items = state
         .feed
-        .recent(50)
+        .recent(viewer, 50)
         .await
         .map_err(|e| ServerFnError::new(e.to_string()))?;
 
@@ -303,17 +307,17 @@ pub async fn get_timeline() -> Result<Vec<FeedItemDto>, ServerFnError> {
 pub async fn get_post_detail(
     id: i64,
 ) -> Result<(Option<FeedItemDto>, Vec<FeedItemDto>), ServerFnError> {
-    let state = use_context::<state::DomainState>()
-        .ok_or_else(|| ServerFnError::new("DomainState absent"))?;
+    let state = domain_state()?;
+    let viewer = optional_viewer(&state).await;
     let post = state
         .feed
-        .by_id(id)
+        .by_id(viewer, id)
         .await
         .map_err(|e| ServerFnError::new(e.to_string()))?
         .map(to_dto);
     let replies = state
         .feed
-        .replies(id, 100)
+        .replies(viewer, id, 100)
         .await
         .map_err(|e| ServerFnError::new(e.to_string()))?
         .into_iter()
@@ -325,11 +329,11 @@ pub async fn get_post_detail(
 /// Server function : posts d'un athlète (page profil).
 #[server(endpoint = "get_profile")]
 pub async fn get_profile(username: String) -> Result<Vec<FeedItemDto>, ServerFnError> {
-    let state = use_context::<state::DomainState>()
-        .ok_or_else(|| ServerFnError::new("DomainState absent"))?;
+    let state = domain_state()?;
+    let viewer = optional_viewer(&state).await;
     let items = state
         .feed
-        .by_author(&username, 50)
+        .by_author(viewer, &username, 50)
         .await
         .map_err(|e| ServerFnError::new(e.to_string()))?;
     Ok(items.into_iter().map(to_dto).collect())
@@ -352,6 +356,16 @@ async fn require_claims(state: &state::DomainState) -> Result<auth::Claims, Serv
     auth::token_from_headers(&headers)
         .and_then(|t| auth::decode_token(&state.jwt_secret, &t))
         .ok_or_else(|| ServerFnError::new("Non authentifié"))
+}
+
+/// Observateur courant pour les lectures publiques : `Some(id)` si un cookie de
+/// session valide est présent, `None` sinon (anonyme autorisé, pas de rejet).
+#[cfg(feature = "ssr")]
+async fn optional_viewer(state: &state::DomainState) -> Option<grind_domain::entities::UserId> {
+    let headers = leptos_axum::extract::<axum::http::HeaderMap>().await.ok()?;
+    let claims = auth::token_from_headers(&headers)
+        .and_then(|t| auth::decode_token(&state.jwt_secret, &t))?;
+    Some(grind_domain::entities::UserId(claims.sub))
 }
 
 /// Server function : suppression d'un post (staff uniquement, auth par cookie).
@@ -414,6 +428,7 @@ pub async fn create_post(content: String) -> Result<FeedItemDto, ServerFnError> 
         reposts_count: 0,
         replies_count: 0,
         created_at: String::new(),
+        liked_by_me: false,
     })
 }
 
