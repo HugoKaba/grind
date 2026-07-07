@@ -16,6 +16,8 @@ use grind_shared::{FeedItemDto, LoginDto};
 #[cfg(feature = "ssr")]
 pub mod auth;
 #[cfg(feature = "ssr")]
+pub mod server;
+#[cfg(feature = "ssr")]
 pub mod state;
 
 /// Document HTML (shell) — injecté par le serveur, hydraté par le client.
@@ -271,7 +273,7 @@ fn to_dto(i: grind_application::FeedItem) -> FeedItemDto {
 }
 
 /// Server function : lit le fil via le use case/repo réel (context `DomainState`).
-#[server]
+#[server(endpoint = "get_timeline")]
 pub async fn get_timeline() -> Result<Vec<FeedItemDto>, ServerFnError> {
     let state = use_context::<state::DomainState>()
         .ok_or_else(|| ServerFnError::new("DomainState absent du context"))?;
@@ -286,7 +288,7 @@ pub async fn get_timeline() -> Result<Vec<FeedItemDto>, ServerFnError> {
 }
 
 /// Server function : détail d'un post + son thread.
-#[server]
+#[server(endpoint = "get_post_detail")]
 pub async fn get_post_detail(
     id: i64,
 ) -> Result<(Option<FeedItemDto>, Vec<FeedItemDto>), ServerFnError> {
@@ -310,7 +312,7 @@ pub async fn get_post_detail(
 }
 
 /// Server function : posts d'un athlète (page profil).
-#[server]
+#[server(endpoint = "get_profile")]
 pub async fn get_profile(username: String) -> Result<Vec<FeedItemDto>, ServerFnError> {
     let state = use_context::<state::DomainState>()
         .ok_or_else(|| ServerFnError::new("DomainState absent"))?;
@@ -323,7 +325,7 @@ pub async fn get_profile(username: String) -> Result<Vec<FeedItemDto>, ServerFnE
 }
 
 /// Server function : suppression d'un post (staff uniquement, auth par cookie).
-#[server]
+#[server(endpoint = "delete_post")]
 pub async fn delete_post(id: i64) -> Result<(), ServerFnError> {
     let state = use_context::<state::DomainState>()
         .ok_or_else(|| ServerFnError::new("DomainState absent"))?;
@@ -344,7 +346,7 @@ pub async fn delete_post(id: i64) -> Result<(), ServerFnError> {
 }
 
 /// Server function : connexion (auth hybride via use case) → pose un cookie de session.
-#[server]
+#[server(endpoint = "login")]
 pub async fn login(username: String, password: String) -> Result<LoginDto, ServerFnError> {
     let state = use_context::<state::DomainState>()
         .ok_or_else(|| ServerFnError::new("DomainState absent"))?;
@@ -368,7 +370,7 @@ pub async fn login(username: String, password: String) -> Result<LoginDto, Serve
 }
 
 /// Server function : crée un post (auth par cookie de session).
-#[server]
+#[server(endpoint = "create_post")]
 pub async fn create_post(content: String) -> Result<FeedItemDto, ServerFnError> {
     let state = use_context::<state::DomainState>()
         .ok_or_else(|| ServerFnError::new("DomainState absent"))?;

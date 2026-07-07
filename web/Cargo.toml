@@ -48,6 +48,10 @@ ssr = [
     "leptos_router/ssr",
 ]
 
+[dev-dependencies]
+tower = { version = "0.5", features = ["util"] }
+http-body-util = "0.1"
+
 [package.metadata.leptos]
 output-name = "grind"
 site-root = "target/site"

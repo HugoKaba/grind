@@ -19,8 +19,9 @@ Le repo est sur iCloud → rediriger `target/` hors iCloud pour éviter les temp
 
 ```sh
 export CARGO_TARGET_DIR=/tmp/grind-rs-target   # target -> target.nosync (hors iCloud)
-cargo test --workspace                 # logique métier (domain/application/infrastructure)
+cargo test --workspace                 # domain/application/infrastructure + intégration web
 cargo test -p grind-infrastructure     # spike auth (vérif hash Django réel) + repos SeaORM
+cargo test -p grind-web                # server functions via tower::oneshot (login, post, admin)
 ```
 
 ### Frontend hydraté (`web/`)
