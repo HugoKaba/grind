@@ -173,6 +173,36 @@ mod tests {
         assert_eq!(resp.status(), StatusCode::OK);
         assert!(body_string(resp).await.contains("Via server fn"));
 
+        // toggle_like sans cookie → refusé
+        let resp = app
+            .clone()
+            .oneshot(form("/api/toggle_like", None, "id=1"))
+            .await
+            .unwrap();
+        assert_ne!(resp.status(), StatusCode::OK);
+
+        // toggle_like (messi) sur le post seedé (id=1) → like : liked=true, count=1
+        let resp = app
+            .clone()
+            .oneshot(form("/api/toggle_like", Some(&messi), "id=1"))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = body_string(resp).await;
+        assert!(body.contains("\"liked\":true"), "attendu liked=true, reçu: {body}");
+        assert!(body.contains("\"likes_count\":1"), "attendu likes_count=1, reçu: {body}");
+
+        // re-toggle (messi) → unlike : liked=false, count=0
+        let resp = app
+            .clone()
+            .oneshot(form("/api/toggle_like", Some(&messi), "id=1"))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = body_string(resp).await;
+        assert!(body.contains("\"liked\":false"), "attendu liked=false, reçu: {body}");
+        assert!(body.contains("\"likes_count\":0"), "attendu likes_count=0, reçu: {body}");
+
         // delete_post non-staff (ronaldo) → refusé
         let resp = app
             .clone()

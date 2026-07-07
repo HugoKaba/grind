@@ -46,6 +46,14 @@ pub struct LoginDto {
     pub is_staff: bool,
 }
 
+/// État d'un like renvoyé après un toggle (WASM-safe).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LikeStateDto {
+    pub post_id: i64,
+    pub liked: bool,
+    pub likes_count: i64,
+}
+
 /// Élément de fil pour l'affichage (retour de server function, WASM-safe).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FeedItemDto {

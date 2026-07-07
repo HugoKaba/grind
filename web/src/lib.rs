@@ -11,7 +11,7 @@ use leptos_router::components::{Route, Router, Routes, A};
 use leptos_router::hooks::use_params_map;
 use leptos_router::path;
 
-use grind_shared::{FeedItemDto, LoginDto};
+use grind_shared::{FeedItemDto, LikeStateDto, LoginDto};
 
 #[cfg(feature = "ssr")]
 pub mod auth;
@@ -69,9 +69,14 @@ fn Home() -> impl IntoView {
     // Server actions (formulaires → server functions).
     let login = ServerAction::<Login>::new();
     let create = ServerAction::<CreatePost>::new();
+    let like = ServerAction::<ToggleLike>::new();
 
-    // Le fil se recharge après chaque publication (source = version de l'action).
-    let timeline = Resource::new(move || create.version().get(), |_| get_timeline());
+    // Le fil se recharge après chaque publication OU (dé)like : la source combine
+    // les deux versions d'action, donc tout changement re-déclenche le fetch.
+    let timeline = Resource::new(
+        move || (create.version().get(), like.version().get()),
+        |_| get_timeline(),
+    );
 
     view! {
         <h1>"🏟️ GRIND"</h1>
@@ -109,6 +114,7 @@ fn Home() -> impl IntoView {
                                     {items
                                         .into_iter()
                                         .map(|i| {
+                                            let id = i.id;
                                             view! {
                                                 <li class="post">
                                                     <strong>"@"{i.author_username}</strong>
@@ -116,6 +122,11 @@ fn Home() -> impl IntoView {
                                                     <span>{i.content}</span>
                                                     " — "
                                                     <em>{i.likes_count}" ❤"</em>
+                                                    " "
+                                                    <ActionForm action=like>
+                                                        <input type="hidden" name="id" value=id />
+                                                        <button type="submit">"❤ Like"</button>
+                                                    </ActionForm>
                                                 </li>
                                             }
                                         })
@@ -324,17 +335,30 @@ pub async fn get_profile(username: String) -> Result<Vec<FeedItemDto>, ServerFnE
     Ok(items.into_iter().map(to_dto).collect())
 }
 
-/// Server function : suppression d'un post (staff uniquement, auth par cookie).
-#[server(endpoint = "delete_post")]
-pub async fn delete_post(id: i64) -> Result<(), ServerFnError> {
-    let state = use_context::<state::DomainState>()
-        .ok_or_else(|| ServerFnError::new("DomainState absent"))?;
+/// Récupère l'état serveur injecté (context Leptos) ou échoue proprement.
+#[cfg(feature = "ssr")]
+fn domain_state() -> Result<state::DomainState, ServerFnError> {
+    use_context::<state::DomainState>()
+        .ok_or_else(|| ServerFnError::new("DomainState absent du context"))
+}
+
+/// Extrait et valide les claims du cookie de session (auth par cookie).
+/// Rejette si non authentifié. Utilisé par toutes les server fns protégées.
+#[cfg(feature = "ssr")]
+async fn require_claims(state: &state::DomainState) -> Result<auth::Claims, ServerFnError> {
     let headers = leptos_axum::extract::<axum::http::HeaderMap>()
         .await
         .map_err(|e| ServerFnError::new(e.to_string()))?;
-    let claims = auth::token_from_headers(&headers)
+    auth::token_from_headers(&headers)
         .and_then(|t| auth::decode_token(&state.jwt_secret, &t))
-        .ok_or_else(|| ServerFnError::new("Non authentifié"))?;
+        .ok_or_else(|| ServerFnError::new("Non authentifié"))
+}
+
+/// Server function : suppression d'un post (staff uniquement, auth par cookie).
+#[server(endpoint = "delete_post")]
+pub async fn delete_post(id: i64) -> Result<(), ServerFnError> {
+    let state = domain_state()?;
+    let claims = require_claims(&state).await?;
     if !claims.is_staff {
         return Err(ServerFnError::new("Réservé au staff"));
     }
@@ -372,15 +396,8 @@ pub async fn login(username: String, password: String) -> Result<LoginDto, Serve
 /// Server function : crée un post (auth par cookie de session).
 #[server(endpoint = "create_post")]
 pub async fn create_post(content: String) -> Result<FeedItemDto, ServerFnError> {
-    let state = use_context::<state::DomainState>()
-        .ok_or_else(|| ServerFnError::new("DomainState absent"))?;
-
-    let headers = leptos_axum::extract::<axum::http::HeaderMap>()
-        .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?;
-    let claims = auth::token_from_headers(&headers)
-        .and_then(|t| auth::decode_token(&state.jwt_secret, &t))
-        .ok_or_else(|| ServerFnError::new("Non authentifié"))?;
+    let state = domain_state()?;
+    let claims = require_claims(&state).await?;
 
     let uc = grind_application::CreatePost::new(&*state.posts);
     let post = uc
@@ -398,6 +415,25 @@ pub async fn create_post(content: String) -> Result<FeedItemDto, ServerFnError> 
         replies_count: 0,
         created_at: String::new(),
     })
+}
+
+/// Server function : bascule le like d'un post pour l'utilisateur connecté.
+/// Controller pur : l'orchestration like/unlike vit dans le use case `ToggleLike`.
+#[server(endpoint = "toggle_like")]
+pub async fn toggle_like(id: i64) -> Result<LikeStateDto, ServerFnError> {
+    let state = domain_state()?;
+    let claims = require_claims(&state).await?;
+
+    let uc = grind_application::ToggleLike::new(&*state.likes);
+    let s = uc
+        .toggle(
+            grind_domain::entities::UserId(claims.sub),
+            grind_domain::entities::PostId(id),
+        )
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?;
+
+    Ok(LikeStateDto { post_id: id, liked: s.liked, likes_count: s.likes_count })
 }
 
 /// Point d'entrée d'hydratation côté client (WASM).

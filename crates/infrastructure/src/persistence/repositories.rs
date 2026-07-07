@@ -240,6 +240,16 @@ impl LikeRepository for SeaOrmLikeRepository {
         txn.commit().await.map_err(db_err)?;
         Ok(LikeToggle { changed, likes_count: count })
     }
+
+    async fn has_liked(&self, user: UserId, post_id: PostId) -> Result<bool, RepoError> {
+        let found = post_like::Entity::find()
+            .filter(post_like::Column::UserId.eq(user.0))
+            .filter(post_like::Column::PostId.eq(post_id.0))
+            .one(&self.db)
+            .await
+            .map_err(db_err)?;
+        Ok(found.is_some())
+    }
 }
 
 // ---------------------------------------------------------------------------

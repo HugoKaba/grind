@@ -68,6 +68,8 @@ pub trait LikeRepository: Send + Sync {
     async fn like(&self, user: UserId, post: PostId) -> Result<LikeToggle, RepoError>;
     /// Retire un like (idempotent) + décrémente atomiquement `likes_count`.
     async fn unlike(&self, user: UserId, post: PostId) -> Result<LikeToggle, RepoError>;
+    /// `true` si `user` a déjà liké `post` (read model pour décider du toggle).
+    async fn has_liked(&self, user: UserId, post: PostId) -> Result<bool, RepoError>;
 }
 
 /// Enregistrement minimal pour l'authentification.
@@ -171,6 +173,15 @@ impl<'a, R: FollowRepository + ?Sized> FollowUser<'a, R> {
     }
 }
 
+/// État d'un post vis-à-vis d'un utilisateur après (dé)like : renvoyé au client.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct LikeState {
+    /// `true` si l'utilisateur like désormais le post.
+    pub liked: bool,
+    /// Nombre total de likes du post après opération.
+    pub likes_count: i64,
+}
+
 /// Like / unlike un post. La cohérence du compteur est garantie par le repo.
 pub struct ToggleLike<'a, R: LikeRepository + ?Sized> {
     repo: &'a R,
@@ -187,6 +198,18 @@ impl<'a, R: LikeRepository + ?Sized> ToggleLike<'a, R> {
 
     pub async fn unlike(&self, user: UserId, post: PostId) -> Result<LikeToggle, AppError> {
         Ok(self.repo.unlike(user, post).await?)
+    }
+
+    /// Bascule l'état de like selon l'état courant (orchestration = ici, pas
+    /// dans la server function). Like si absent, unlike sinon.
+    pub async fn toggle(&self, user: UserId, post: PostId) -> Result<LikeState, AppError> {
+        if self.repo.has_liked(user, post).await? {
+            let t = self.repo.unlike(user, post).await?;
+            Ok(LikeState { liked: false, likes_count: t.likes_count })
+        } else {
+            let t = self.repo.like(user, post).await?;
+            Ok(LikeState { liked: true, likes_count: t.likes_count })
+        }
     }
 }
 
@@ -376,6 +399,9 @@ mod tests {
             let count = likes.iter().filter(|(_, p)| *p == post).count() as i64;
             Ok(LikeToggle { changed, likes_count: count })
         }
+        async fn has_liked(&self, user: UserId, post: PostId) -> Result<bool, RepoError> {
+            Ok(self.likes.lock().unwrap().contains(&(user, post)))
+        }
     }
 
     #[tokio::test]
@@ -395,6 +421,20 @@ mod tests {
         // unlike
         let r = uc.unlike(UserId(1), post).await.unwrap();
         assert_eq!(r, LikeToggle { changed: true, likes_count: 1 });
+    }
+
+    #[tokio::test]
+    async fn toggle_like_flips_state_from_current() {
+        let repo = InMemoryLikes::default();
+        let uc = ToggleLike::new(&repo);
+        let post = PostId(3);
+
+        // pas encore liké → toggle = like
+        let s = uc.toggle(UserId(1), post).await.unwrap();
+        assert_eq!(s, LikeState { liked: true, likes_count: 1 });
+        // déjà liké → toggle = unlike
+        let s = uc.toggle(UserId(1), post).await.unwrap();
+        assert_eq!(s, LikeState { liked: false, likes_count: 0 });
     }
 
     struct InMemoryUsers {
