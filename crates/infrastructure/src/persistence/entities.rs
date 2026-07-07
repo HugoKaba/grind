@@ -270,3 +270,40 @@ pub mod notification {
 
     impl ActiveModelBehavior for ActiveModel {}
 }
+
+pub mod hashtag {
+    use sea_orm::entity::prelude::*;
+
+    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
+    #[sea_orm(table_name = "hashtag")]
+    pub struct Model {
+        #[sea_orm(primary_key)]
+        pub id: i64,
+        #[sea_orm(unique)]
+        pub slug: String,
+        pub posts_count: i64,
+    }
+
+    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
+    pub enum Relation {}
+
+    impl ActiveModelBehavior for ActiveModel {}
+}
+
+pub mod post_hashtag {
+    use sea_orm::entity::prelude::*;
+
+    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
+    #[sea_orm(table_name = "post_hashtag")]
+    pub struct Model {
+        #[sea_orm(primary_key)]
+        pub id: i64,
+        pub post_id: i64,
+        pub hashtag_id: i64,
+    }
+
+    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
+    pub enum Relation {}
+
+    impl ActiveModelBehavior for ActiveModel {}
+}

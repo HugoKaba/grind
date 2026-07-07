@@ -233,6 +233,21 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
+
+        // post avec hashtag → extraction auto + page trending
+        let resp = app
+            .clone()
+            .oneshot(form("/api/create_post", Some(&messi), "content=Quel but %23Football %23Goals"))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let resp = app
+            .clone()
+            .oneshot(form("/api/get_trending", None, ""))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        assert!(body_string(resp).await.contains("football"), "le hashtag extrait doit être trending");
         let resp = app
             .clone()
             .oneshot(form("/api/get_post_detail", None, "id=1"))

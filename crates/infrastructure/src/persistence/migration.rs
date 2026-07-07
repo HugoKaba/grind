@@ -14,6 +14,7 @@ impl MigratorTrait for Migrator {
             Box::new(m0001_init::Migration),
             Box::new(m0002_repost_bookmark::Migration),
             Box::new(m0003_messaging::Migration),
+            Box::new(m0004_hashtags::Migration),
         ]
     }
 }
@@ -357,6 +358,68 @@ mod m0003_messaging {
 
         async fn down(&self, m: &SchemaManager) -> Result<(), DbErr> {
             for t in ["notification", "message"] {
+                m.drop_table(Table::drop().table(a(t)).if_exists().to_owned()).await?;
+            }
+            Ok(())
+        }
+    }
+}
+
+/// Hashtags : extraction auto (`#tag`) à la création d'un post + page trending.
+mod m0004_hashtags {
+    use super::a;
+    use sea_orm_migration::prelude::*;
+
+    pub struct Migration;
+
+    impl MigrationName for Migration {
+        fn name(&self) -> &str {
+            "m0004_hashtags"
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl MigrationTrait for Migration {
+        async fn up(&self, m: &SchemaManager) -> Result<(), DbErr> {
+            // hashtag (compteur dénormalisé posts_count pour le trending)
+            m.create_table(
+                Table::create()
+                    .table(a("hashtag"))
+                    .if_not_exists()
+                    .col(ColumnDef::new(a("id")).big_integer().not_null().auto_increment().primary_key())
+                    .col(ColumnDef::new(a("slug")).string().not_null().unique_key())
+                    .col(ColumnDef::new(a("posts_count")).big_integer().not_null().default(0))
+                    .to_owned(),
+            )
+            .await?;
+
+            // post_hashtag (M2M, unique par paire)
+            m.create_table(
+                Table::create()
+                    .table(a("post_hashtag"))
+                    .if_not_exists()
+                    .col(ColumnDef::new(a("id")).big_integer().not_null().auto_increment().primary_key())
+                    .col(ColumnDef::new(a("post_id")).big_integer().not_null())
+                    .col(ColumnDef::new(a("hashtag_id")).big_integer().not_null())
+                    .to_owned(),
+            )
+            .await?;
+            m.create_index(
+                Index::create()
+                    .if_not_exists()
+                    .unique()
+                    .name("uq_post_hashtag_pair")
+                    .table(a("post_hashtag"))
+                    .col(a("post_id"))
+                    .col(a("hashtag_id"))
+                    .to_owned(),
+            )
+            .await?;
+            Ok(())
+        }
+
+        async fn down(&self, m: &SchemaManager) -> Result<(), DbErr> {
+            for t in ["post_hashtag", "hashtag"] {
                 m.drop_table(Table::drop().table(a(t)).if_exists().to_owned()).await?;
             }
             Ok(())

@@ -191,3 +191,10 @@ pub struct NotificationDto {
     pub is_read: bool,
     pub created_at: String,
 }
+
+/// Hashtag pour la page trending (WASM-safe).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HashtagDto {
+    pub slug: String,
+    pub posts_count: i64,
+}

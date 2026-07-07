@@ -326,6 +326,21 @@ pub trait NotificationRepository: Send + Sync {
     async fn mark_all_read(&self, user: UserId) -> Result<u64, RepoError>;
 }
 
+/// Hashtag pour la page trending (read model).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HashtagRow {
+    pub slug: String,
+    pub posts_count: i64,
+}
+
+/// Lecture des hashtags (l'extraction/attachement est fait par le repo de posts
+/// à la création, à partir de `PostContent::hashtags()`).
+#[async_trait]
+pub trait HashtagRepository: Send + Sync {
+    /// Hashtags les plus utilisés (trending), du plus au moins fréquent.
+    async fn trending(&self, limit: u64) -> Result<Vec<HashtagRow>, RepoError>;
+}
+
 // ---------------------------------------------------------------------------
 // Use cases — orchestrent domaine + ports. Zéro dépendance framework.
 // ---------------------------------------------------------------------------

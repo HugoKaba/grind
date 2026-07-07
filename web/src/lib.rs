@@ -12,8 +12,8 @@ use leptos_router::hooks::use_params_map;
 use leptos_router::path;
 
 use grind_shared::{
-    BookmarkStateDto, CatalogDto, ConversationDto, FeedItemDto, FollowStateDto, LikeStateDto,
-    LoginDto, MatchPageDto, MessageDto, NotificationDto, ProfileDto, RepostStateDto,
+    BookmarkStateDto, CatalogDto, ConversationDto, FeedItemDto, FollowStateDto, HashtagDto,
+    LikeStateDto, LoginDto, MatchPageDto, MessageDto, NotificationDto, ProfileDto, RepostStateDto,
     TeamFollowStateDto, TeamPageDto,
 };
 // DTOs uniquement nommés dans les mappers SSR (server fns) → gated pour éviter
@@ -56,8 +56,8 @@ pub fn App() -> impl IntoView {
         <Router>
             <nav>
                 <A href="/">"Accueil"</A>" · "<A href="/sports">"Sports"</A>" · "
-                <A href="/messages">"Messages"</A>" · "<A href="/notifications">"Notifs"</A>" · "
-                <A href="/admin">"Admin"</A>
+                <A href="/trending">"Trending"</A>" · "<A href="/messages">"Messages"</A>" · "
+                <A href="/notifications">"Notifs"</A>" · "<A href="/admin">"Admin"</A>
             </nav>
             <main>
                 <Routes fallback=|| "Page introuvable.".into_view()>
@@ -65,6 +65,7 @@ pub fn App() -> impl IntoView {
                     <Route path=path!("/post/:id") view=PostDetail />
                     <Route path=path!("/u/:username") view=Profile />
                     <Route path=path!("/sports") view=Sports />
+                    <Route path=path!("/trending") view=Trending />
                     <Route path=path!("/team/:slug") view=Team />
                     <Route path=path!("/match/:id") view=MatchPage />
                     <Route path=path!("/messages") view=Messages />
@@ -485,6 +486,33 @@ fn MatchPage() -> impl IntoView {
                                 .into_any()
                         }
                         Ok(None) => view! { <p>"Match introuvable."</p> }.into_any(),
+                        Err(e) => view! { <p>"Erreur : " {e.to_string()}</p> }.into_any(),
+                    })
+            }}
+        </Suspense>
+    }
+}
+
+#[component]
+fn Trending() -> impl IntoView {
+    let tags = Resource::new(|| (), |_| get_trending());
+    view! {
+        <h1>"🔥 Trending"</h1>
+        <Suspense fallback=|| view! { <p>"Chargement…"</p> }>
+            {move || {
+                tags.get()
+                    .map(|res| match res {
+                        Ok(list) => {
+                            view! {
+                                <ul class="trending">
+                                    {list
+                                        .into_iter()
+                                        .map(|h| view! { <li>"#"{h.slug}" — "{h.posts_count}" posts"</li> })
+                                        .collect_view()}
+                                </ul>
+                            }
+                                .into_any()
+                        }
                         Err(e) => view! { <p>"Erreur : " {e.to_string()}</p> }.into_any(),
                     })
             }}
@@ -1197,6 +1225,22 @@ pub async fn mark_notifications_read() -> Result<(), ServerFnError> {
         .await
         .map_err(|e| ServerFnError::new(e.to_string()))?;
     Ok(())
+}
+
+/// Server function : hashtags trending (public). Extraits automatiquement à la
+/// création des posts depuis `PostContent::hashtags()`.
+#[server(endpoint = "get_trending")]
+pub async fn get_trending() -> Result<Vec<HashtagDto>, ServerFnError> {
+    let state = domain_state()?;
+    let rows = state
+        .hashtags
+        .trending(20)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?;
+    Ok(rows
+        .into_iter()
+        .map(|h| HashtagDto { slug: h.slug, posts_count: h.posts_count })
+        .collect())
 }
 
 /// Point d'entrée d'hydratation côté client (WASM).

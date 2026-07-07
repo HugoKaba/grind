@@ -12,17 +12,17 @@ use sea_orm::{
 
 use grind_application::{
     AuthUserRecord, BookmarkRepository, ConversationRow, FeedItem, FeedRepository, FollowRepository,
-    LikeRepository, LikeToggle, MatchRepository, MatchRow, MessageRepository, MessageRow,
-    NotificationKind, NotificationRepository, NotificationRow, PostRepository, RepoError,
-    RepostRepository, RepostToggle, SportCatalog, SportRow, TeamFollowRepository, TeamRow,
-    UserRepository,
+    HashtagRepository, HashtagRow, LikeRepository, LikeToggle, MatchRepository, MatchRow,
+    MessageRepository, MessageRow, NotificationKind, NotificationRepository, NotificationRow,
+    PostRepository, RepoError, RepostRepository, RepostToggle, SportCatalog, SportRow,
+    TeamFollowRepository, TeamRow, UserRepository,
 };
 use grind_domain::entities::{Follow, MatchId, Post, PostId, SportId, TeamId, UserId};
 use grind_domain::value_objects::{MessageBody, PostContent};
 
 use super::entities::{
-    bookmark, follow, match_event, message, notification, post, post_like, repost, sport, team,
-    team_follow, users,
+    bookmark, follow, hashtag, match_event, message, notification, post, post_hashtag, post_like,
+    repost, sport, team, team_follow, users,
 };
 
 fn db_err(e: DbErr) -> RepoError {
@@ -40,6 +40,58 @@ fn to_domain_post(m: post::Model) -> Result<Post, RepoError> {
         match_id: m.match_id.map(MatchId),
         team: m.team_id.map(TeamId),
     })
+}
+
+/// Extrait les hashtags du contenu (règle domaine `PostContent::hashtags()`) et
+/// les attache au post : upsert par slug + lien + incrément atomique `posts_count`.
+/// Exécuté dans la **même transaction** que l'insertion du post.
+async fn attach_hashtags<C: ConnectionTrait>(
+    conn: &C,
+    post_id: i64,
+    content: &PostContent,
+) -> Result<(), RepoError> {
+    for slug in content.hashtags() {
+        // Upsert du hashtag par slug.
+        let existing = hashtag::Entity::find()
+            .filter(hashtag::Column::Slug.eq(&slug))
+            .one(conn)
+            .await
+            .map_err(db_err)?;
+        let hashtag_id = match existing {
+            Some(h) => {
+                hashtag::Entity::update_many()
+                    .col_expr(
+                        hashtag::Column::PostsCount,
+                        Expr::col(hashtag::Column::PostsCount).add(1),
+                    )
+                    .filter(hashtag::Column::Id.eq(h.id))
+                    .exec(conn)
+                    .await
+                    .map_err(db_err)?;
+                h.id
+            }
+            None => {
+                let created = hashtag::ActiveModel {
+                    slug: Set(slug.clone()),
+                    posts_count: Set(1),
+                    ..Default::default()
+                }
+                .insert(conn)
+                .await
+                .map_err(db_err)?;
+                created.id
+            }
+        };
+        post_hashtag::ActiveModel {
+            post_id: Set(post_id),
+            hashtag_id: Set(hashtag_id),
+            ..Default::default()
+        }
+        .insert(conn)
+        .await
+        .map_err(db_err)?;
+    }
+    Ok(())
 }
 
 async fn likes_count<C: ConnectionTrait>(conn: &C, post_id: i64) -> Result<i64, RepoError> {
@@ -103,6 +155,9 @@ impl PostRepository for SeaOrmPostRepository {
                 .map_err(db_err)?;
         }
 
+        // Extraction + attachement des hashtags (même transaction).
+        attach_hashtags(&txn, model.id, content).await?;
+
         txn.commit().await.map_err(db_err)?;
         to_domain_post(model)
     }
@@ -122,6 +177,7 @@ impl PostRepository for SeaOrmPostRepository {
         sport: SportId,
         match_id: MatchId,
     ) -> Result<Post, RepoError> {
+        let txn = self.db.begin().await.map_err(db_err)?;
         let model = post::ActiveModel {
             author_id: Set(author.0),
             content: Set(content.as_str().to_owned()),
@@ -135,9 +191,11 @@ impl PostRepository for SeaOrmPostRepository {
             created_at: Set(Utc::now()),
             ..Default::default()
         }
-        .insert(&self.db)
+        .insert(&txn)
         .await
         .map_err(db_err)?;
+        attach_hashtags(&txn, model.id, content).await?;
+        txn.commit().await.map_err(db_err)?;
         to_domain_post(model)
     }
 }
@@ -1061,6 +1119,34 @@ impl NotificationRepository for SeaOrmNotificationRepository {
     }
 }
 
+// ---------------------------------------------------------------------------
+
+pub struct SeaOrmHashtagRepository {
+    db: DatabaseConnection,
+}
+
+impl SeaOrmHashtagRepository {
+    pub fn new(db: DatabaseConnection) -> Self {
+        Self { db }
+    }
+}
+
+#[async_trait]
+impl HashtagRepository for SeaOrmHashtagRepository {
+    async fn trending(&self, limit: u64) -> Result<Vec<HashtagRow>, RepoError> {
+        let rows = hashtag::Entity::find()
+            .order_by_desc(hashtag::Column::PostsCount)
+            .limit(limit)
+            .all(&self.db)
+            .await
+            .map_err(db_err)?;
+        Ok(rows
+            .into_iter()
+            .map(|h| HashtagRow { slug: h.slug, posts_count: h.posts_count })
+            .collect())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1288,5 +1374,22 @@ mod tests {
         assert!(!list[0].is_read);
         assert_eq!(notifs.mark_all_read(UserId(2)).await.unwrap(), 1);
         assert!(notifs.list(UserId(2), 50).await.unwrap()[0].is_read);
+    }
+
+    #[tokio::test]
+    async fn hashtags_extracted_on_post_and_trending() {
+        let db = connect_and_migrate("sqlite::memory:").await.unwrap();
+        seed_reference_and_athletes(&db, &PasswordService::new()).await.unwrap();
+        let posts = SeaOrmPostRepository::new(db.clone());
+
+        // #football apparaît deux fois → posts_count = 2 ; #goals une fois.
+        posts.insert(UserId(1), &PostContent::new("Golazo #Football #Goals").unwrap(), None).await.unwrap();
+        posts.insert(UserId(2), &PostContent::new("Quel but ! #football").unwrap(), None).await.unwrap();
+
+        let tags = SeaOrmHashtagRepository::new(db).trending(10).await.unwrap();
+        // Trending trié par fréquence : football (2) avant goals (1).
+        assert_eq!(tags[0].slug, "football");
+        assert_eq!(tags[0].posts_count, 2);
+        assert!(tags.iter().any(|t| t.slug == "goals" && t.posts_count == 1));
     }
 }

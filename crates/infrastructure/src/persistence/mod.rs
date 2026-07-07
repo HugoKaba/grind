@@ -10,10 +10,10 @@ use sea_orm_migration::MigratorTrait;
 
 pub use migration::Migrator;
 pub use repositories::{
-    SeaOrmBookmarkRepository, SeaOrmFeedRepository, SeaOrmFollowRepository, SeaOrmLikeRepository,
-    SeaOrmMatchRepository, SeaOrmMessageRepository, SeaOrmNotificationRepository,
-    SeaOrmPostRepository, SeaOrmRepostRepository, SeaOrmSportCatalog, SeaOrmTeamFollowRepository,
-    SeaOrmUserRepository,
+    SeaOrmBookmarkRepository, SeaOrmFeedRepository, SeaOrmFollowRepository, SeaOrmHashtagRepository,
+    SeaOrmLikeRepository, SeaOrmMatchRepository, SeaOrmMessageRepository,
+    SeaOrmNotificationRepository, SeaOrmPostRepository, SeaOrmRepostRepository, SeaOrmSportCatalog,
+    SeaOrmTeamFollowRepository, SeaOrmUserRepository,
 };
 pub use sea_orm::DatabaseConnection;
 
@@ -41,7 +41,7 @@ mod tests {
         let db = connect_and_migrate("sqlite::memory:").await.unwrap();
 
         // Les tables doivent exister : une requête count ne doit pas échouer.
-        for table in ["users", "sport", "team", "post", "follow", "post_like", "match_event", "team_follow", "repost", "bookmark", "message", "notification"] {
+        for table in ["users", "sport", "team", "post", "follow", "post_like", "match_event", "team_follow", "repost", "bookmark", "message", "notification", "hashtag", "post_hashtag"] {
             let sql = format!("SELECT COUNT(*) AS c FROM {table}");
             db.query_one(Statement::from_string(db.get_database_backend(), sql))
                 .await
