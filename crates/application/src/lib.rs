@@ -51,6 +51,8 @@ pub trait PostRepository: Send + Sync {
 pub trait FollowRepository: Send + Sync {
     async fn add(&self, follow: &Follow) -> Result<bool, RepoError>;
     async fn exists(&self, follower: UserId, following: UserId) -> Result<bool, RepoError>;
+    /// Retire la relation (idempotent). `true` si une ligne a été supprimée.
+    async fn remove(&self, follower: UserId, following: UserId) -> Result<bool, RepoError>;
 }
 
 /// Résultat d'un (dé)like : compteur mis à jour **atomiquement** côté repo.
@@ -173,6 +175,13 @@ impl<'a, R: PostRepository + ?Sized> CreatePost<'a, R> {
     }
 }
 
+/// État d'une relation de suivi après (dé)suivi : renvoyé au client.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FollowState {
+    /// `true` si l'observateur suit désormais la cible.
+    pub following: bool,
+}
+
 /// Fait suivre un utilisateur par un autre (idempotent, refuse l'auto-follow).
 pub struct FollowUser<'a, R: FollowRepository + ?Sized> {
     repo: &'a R,
@@ -191,6 +200,28 @@ impl<'a, R: FollowRepository + ?Sized> FollowUser<'a, R> {
         }
         let created = self.repo.add(&follow).await?;
         Ok(created)
+    }
+
+    /// Retire la relation (idempotent). `true` si elle existait et a été retirée.
+    pub async fn unfollow(&self, follower: UserId, following: UserId) -> Result<bool, AppError> {
+        Ok(self.repo.remove(follower, following).await?)
+    }
+
+    /// Bascule le suivi selon l'état courant (orchestration côté use case, pas
+    /// dans la server function). Refuse l'auto-follow (invariant domaine).
+    pub async fn toggle(
+        &self,
+        follower: UserId,
+        following: UserId,
+    ) -> Result<FollowState, AppError> {
+        let follow = Follow::new(follower, following)?; // invariant : pas d'auto-follow
+        if self.repo.exists(follower, following).await? {
+            self.repo.remove(follower, following).await?;
+            Ok(FollowState { following: false })
+        } else {
+            self.repo.add(&follow).await?;
+            Ok(FollowState { following: true })
+        }
     }
 }
 
@@ -417,6 +448,12 @@ mod tests {
                 .iter()
                 .any(|f| f.follower == follower && f.following == following))
         }
+        async fn remove(&self, follower: UserId, following: UserId) -> Result<bool, RepoError> {
+            let mut rows = self.rows.lock().unwrap();
+            let before = rows.len();
+            rows.retain(|f| !(f.follower == follower && f.following == following));
+            Ok(rows.len() != before)
+        }
     }
 
     #[tokio::test]
@@ -446,6 +483,20 @@ mod tests {
         assert!(!uc.execute(UserId(1), UserId(2)).await.unwrap()); // already exists
 
         let err = uc.execute(UserId(1), UserId(1)).await.unwrap_err();
+        assert_eq!(err, AppError::Domain(DomainError::SelfFollow));
+    }
+
+    #[tokio::test]
+    async fn toggle_follow_flips_state_and_refuses_self() {
+        let repo = InMemoryFollows::default();
+        let uc = FollowUser::new(&repo);
+
+        // pas encore suivi → toggle = follow
+        assert_eq!(uc.toggle(UserId(1), UserId(2)).await.unwrap(), FollowState { following: true });
+        // déjà suivi → toggle = unfollow
+        assert_eq!(uc.toggle(UserId(1), UserId(2)).await.unwrap(), FollowState { following: false });
+        // auto-follow refusé (invariant domaine)
+        let err = uc.toggle(UserId(1), UserId(1)).await.unwrap_err();
         assert_eq!(err, AppError::Domain(DomainError::SelfFollow));
     }
 

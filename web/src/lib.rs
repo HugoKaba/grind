@@ -11,7 +11,7 @@ use leptos_router::components::{Route, Router, Routes, A};
 use leptos_router::hooks::use_params_map;
 use leptos_router::path;
 
-use grind_shared::{FeedItemDto, LikeStateDto, LoginDto};
+use grind_shared::{FeedItemDto, FollowStateDto, LikeStateDto, LoginDto, ProfileDto};
 
 #[cfg(feature = "ssr")]
 pub mod auth;
@@ -212,19 +212,35 @@ fn PostDetail() -> impl IntoView {
 fn Profile() -> impl IntoView {
     let params = use_params_map();
     let username = move || params.read().get("username").unwrap_or_default();
-    let posts = Resource::new(username, |name| async move { get_profile(name).await });
+    let follow = ServerAction::<ToggleFollow>::new();
+    // Le profil se recharge après chaque (dé)suivi (source = username + version).
+    let profile = Resource::new(
+        move || (username(), follow.version().get()),
+        |(name, _)| async move { get_profile(name).await },
+    );
 
     view! {
         <h1>"👤 @"{username}</h1>
         <Suspense fallback=|| view! { <p>"Chargement…"</p> }>
             {move || {
-                posts
+                profile
                     .get()
                     .map(|res| match res {
-                        Ok(items) => {
+                        Ok(p) => {
+                            let follow_btn = p.can_follow.then(|| {
+                                let label = if p.is_following { "Ne plus suivre" } else { "Suivre" };
+                                let uname = p.username.clone();
+                                view! {
+                                    <ActionForm action=follow>
+                                        <input type="hidden" name="username" value=uname />
+                                        <button type="submit">{label}</button>
+                                    </ActionForm>
+                                }
+                            });
                             view! {
+                                <div class="profile-header">{follow_btn}</div>
                                 <ul class="feed">
-                                    {items
+                                    {p.posts
                                         .into_iter()
                                         .map(|i| view! { <li>{i.content}" — "{i.likes_count}" ❤"</li> })
                                         .collect_view()}
@@ -342,17 +358,73 @@ pub async fn get_post_detail(
     Ok((post, replies))
 }
 
-/// Server function : posts d'un athlète (page profil).
+/// Server function : page profil d'un athlète (posts + état de suivi viewer-aware).
 #[server(endpoint = "get_profile")]
-pub async fn get_profile(username: String) -> Result<Vec<FeedItemDto>, ServerFnError> {
+pub async fn get_profile(username: String) -> Result<ProfileDto, ServerFnError> {
     let state = domain_state()?;
     let viewer = optional_viewer(&state).await;
-    let items = state
+
+    let posts: Vec<FeedItemDto> = state
         .feed
         .by_author(viewer, &username, 50)
         .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?
+        .into_iter()
+        .map(to_dto)
+        .collect();
+
+    // État de suivi : nécessite l'id de la cible + un observateur ≠ cible.
+    let (is_following, can_follow) = match viewer {
+        Some(viewer_id) => {
+            let target = state
+                .users
+                .by_username(&username)
+                .await
+                .map_err(|e| ServerFnError::new(e.to_string()))?;
+            match target {
+                Some(t) if t.id != viewer_id.0 => {
+                    let following = state
+                        .follows
+                        .exists(viewer_id, grind_domain::entities::UserId(t.id))
+                        .await
+                        .map_err(|e| ServerFnError::new(e.to_string()))?;
+                    (following, true)
+                }
+                // profil inexistant ou soi-même → pas de bouton Suivre
+                _ => (false, false),
+            }
+        }
+        None => (false, false),
+    };
+
+    Ok(ProfileDto { username, is_following, can_follow, posts })
+}
+
+/// Server function : bascule le suivi d'un athlète (par username) pour l'utilisateur connecté.
+/// Controller pur : l'orchestration follow/unfollow vit dans le use case `FollowUser`.
+#[server(endpoint = "toggle_follow")]
+pub async fn toggle_follow(username: String) -> Result<FollowStateDto, ServerFnError> {
+    let state = domain_state()?;
+    let claims = require_claims(&state).await?;
+
+    // Résolution username → id (mapping controller ; le use case parle en UserId).
+    let target = state
+        .users
+        .by_username(&username)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?
+        .ok_or_else(|| ServerFnError::new("Athlète introuvable"))?;
+
+    let uc = grind_application::FollowUser::new(&*state.follows);
+    let s = uc
+        .toggle(
+            grind_domain::entities::UserId(claims.sub),
+            grind_domain::entities::UserId(target.id),
+        )
+        .await
         .map_err(|e| ServerFnError::new(e.to_string()))?;
-    Ok(items.into_iter().map(to_dto).collect())
+
+    Ok(FollowStateDto { target_username: username, following: s.following })
 }
 
 /// Récupère l'état serveur injecté (context Leptos) ou échoue proprement.

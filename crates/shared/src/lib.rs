@@ -54,6 +54,13 @@ pub struct LikeStateDto {
     pub likes_count: i64,
 }
 
+/// État d'une relation de suivi renvoyé après un toggle (WASM-safe).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FollowStateDto {
+    pub target_username: String,
+    pub following: bool,
+}
+
 /// Élément de fil pour l'affichage (retour de server function, WASM-safe).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FeedItemDto {
@@ -67,4 +74,15 @@ pub struct FeedItemDto {
     pub created_at: String,
     /// `true` si l'utilisateur courant a liké ce post (`false` si anonyme).
     pub liked_by_me: bool,
+}
+
+/// Page profil (viewer-aware) : posts de l'athlète + état de suivi pour l'observateur.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProfileDto {
+    pub username: String,
+    /// `true` si l'observateur suit déjà cet athlète.
+    pub is_following: bool,
+    /// `true` si un bouton Suivre a du sens (connecté, et pas soi-même).
+    pub can_follow: bool,
+    pub posts: Vec<FeedItemDto>,
 }

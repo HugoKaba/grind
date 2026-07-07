@@ -272,6 +272,49 @@ mod tests {
         assert!(body.contains("\"liked\":false"), "attendu liked=false, reçu: {body}");
         assert!(body.contains("\"likes_count\":0"), "attendu likes_count=0, reçu: {body}");
 
+        // toggle_follow sans cookie → refusé
+        let resp = app
+            .clone()
+            .oneshot(form("/api/toggle_follow", None, "username=ronaldo"))
+            .await
+            .unwrap();
+        assert_ne!(resp.status(), StatusCode::OK);
+
+        // messi suit ronaldo → following=true
+        let resp = app
+            .clone()
+            .oneshot(form("/api/toggle_follow", Some(&messi), "username=ronaldo"))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        assert!(body_string(resp).await.contains("\"following\":true"));
+
+        // get_profile de ronaldo vu par messi → is_following=true (viewer-aware)
+        let resp = app
+            .clone()
+            .oneshot(form("/api/get_profile", Some(&messi), "username=ronaldo"))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        assert!(body_string(resp).await.contains("\"is_following\":true"));
+
+        // messi re-toggle → unfollow : following=false
+        let resp = app
+            .clone()
+            .oneshot(form("/api/toggle_follow", Some(&messi), "username=ronaldo"))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        assert!(body_string(resp).await.contains("\"following\":false"));
+
+        // messi tente de se suivre lui-même → refusé (invariant domaine SelfFollow)
+        let resp = app
+            .clone()
+            .oneshot(form("/api/toggle_follow", Some(&messi), "username=messi"))
+            .await
+            .unwrap();
+        assert_ne!(resp.status(), StatusCode::OK);
+
         // delete_post non-staff (ronaldo) → refusé
         let resp = app
             .clone()

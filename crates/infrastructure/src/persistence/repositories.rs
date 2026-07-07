@@ -162,6 +162,16 @@ impl FollowRepository for SeaOrmFollowRepository {
             .map_err(db_err)?;
         Ok(found.is_some())
     }
+
+    async fn remove(&self, follower: UserId, following: UserId) -> Result<bool, RepoError> {
+        let res = follow::Entity::delete_many()
+            .filter(follow::Column::FollowerId.eq(follower.0))
+            .filter(follow::Column::FollowingId.eq(following.0))
+            .exec(&self.db)
+            .await
+            .map_err(db_err)?;
+        Ok(res.rows_affected > 0)
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -500,6 +510,10 @@ mod tests {
         assert!(follows.add(&rel).await.unwrap());
         assert!(!follows.add(&rel).await.unwrap());
         assert!(follows.exists(UserId(1), UserId(2)).await.unwrap());
+        // Unfollow : idempotent (true la 1re fois, false ensuite).
+        assert!(follows.remove(UserId(1), UserId(2)).await.unwrap());
+        assert!(!follows.remove(UserId(1), UserId(2)).await.unwrap());
+        assert!(!follows.exists(UserId(1), UserId(2)).await.unwrap());
     }
 
     #[tokio::test]
