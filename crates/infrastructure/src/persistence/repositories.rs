@@ -419,6 +419,30 @@ impl FeedRepository for SeaOrmFeedRepository {
         join_authors(&self.db, viewer, posts).await
     }
 
+    async fn following(&self, viewer: UserId, limit: u64) -> Result<Vec<FeedItem>, RepoError> {
+        // 1. Ids suivis par l'observateur…
+        let mut authors: Vec<i64> = follow::Entity::find()
+            .filter(follow::Column::FollowerId.eq(viewer.0))
+            .all(&self.db)
+            .await
+            .map_err(db_err)?
+            .into_iter()
+            .map(|f| f.following_id)
+            .collect();
+        // …plus soi-même (on voit toujours ses propres posts dans son fil).
+        authors.push(viewer.0);
+
+        let posts = post::Entity::find()
+            .filter(post::Column::ParentId.is_null())
+            .filter(post::Column::AuthorId.is_in(authors))
+            .order_by_desc(post::Column::CreatedAt)
+            .limit(limit)
+            .all(&self.db)
+            .await
+            .map_err(db_err)?;
+        join_authors(&self.db, Some(viewer), posts).await
+    }
+
     async fn by_id(&self, viewer: Option<UserId>, id: i64) -> Result<Option<FeedItem>, RepoError> {
         let Some(p) = post::Entity::find_by_id(id).one(&self.db).await.map_err(db_err)? else {
             return Ok(None);
@@ -562,5 +586,34 @@ mod tests {
         // Doublon → Conflict (contrainte d'unicité).
         let err = users.create("newpro", "$argon2id$other", "Dup").await.unwrap_err();
         assert!(matches!(err, RepoError::Conflict(_)), "attendu Conflict, reçu: {err:?}");
+    }
+
+    #[tokio::test]
+    async fn following_feed_shows_followed_authors_and_self_only() {
+        let db = connect_and_migrate("sqlite::memory:").await.unwrap();
+        seed_reference_and_athletes(&db, &PasswordService::new()).await.unwrap();
+        // 3e utilisateur non suivi.
+        let users = SeaOrmUserRepository::new(db.clone());
+        let stranger = users.create("stranger", "$argon2id$h", "Stranger").await.unwrap();
+
+        let posts = SeaOrmPostRepository::new(db.clone());
+        let c = |s: &str| PostContent::new(s).unwrap();
+        posts.insert(UserId(1), &c("post de messi"), None).await.unwrap(); // self
+        posts.insert(UserId(2), &c("post de ronaldo"), None).await.unwrap(); // suivi
+        posts.insert(UserId(stranger.id), &c("post d'un inconnu"), None).await.unwrap(); // non suivi
+
+        // messi (1) suit ronaldo (2), pas l'inconnu.
+        SeaOrmFollowRepository::new(db.clone())
+            .add(&Follow::new(UserId(1), UserId(2)).unwrap())
+            .await
+            .unwrap();
+
+        let feed = SeaOrmFeedRepository::new(db);
+        let items = feed.following(UserId(1), 50).await.unwrap();
+        let contents: Vec<&str> = items.iter().map(|i| i.content.as_str()).collect();
+
+        assert!(contents.contains(&"post de messi"), "doit inclure ses propres posts");
+        assert!(contents.contains(&"post de ronaldo"), "doit inclure les suivis");
+        assert!(!contents.contains(&"post d'un inconnu"), "doit exclure les non-suivis");
     }
 }

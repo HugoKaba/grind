@@ -258,7 +258,7 @@ fn Profile() -> impl IntoView {
 #[component]
 fn Admin() -> impl IntoView {
     let del = ServerAction::<DeletePost>::new();
-    let list = Resource::new(move || del.version().get(), |_| get_timeline());
+    let list = Resource::new(move || del.version().get(), |_| admin_list_posts());
 
     view! {
         <h1>"🛠️ Admin — modération"</h1>
@@ -318,19 +318,37 @@ fn to_dto(i: grind_application::FeedItem) -> FeedItemDto {
     }
 }
 
-/// Server function : lit le fil via le use case/repo réel (context `DomainState`).
-/// L'observateur (optionnel — anonyme accepté) sert à renseigner `liked_by_me`.
+/// Server function : lit le fil. Connecté → fil personnalisé (suivis + soi) ;
+/// anonyme → fil récent/trending. L'observateur renseigne aussi `liked_by_me`.
 #[server(endpoint = "get_timeline")]
 pub async fn get_timeline() -> Result<Vec<FeedItemDto>, ServerFnError> {
     let state = domain_state()?;
     let viewer = optional_viewer(&state).await;
 
+    let items = match viewer {
+        Some(v) => state.feed.following(v, 50).await,
+        None => state.feed.recent(None, 50).await,
+    }
+    .map_err(|e| ServerFnError::new(e.to_string()))?;
+
+    Ok(items.into_iter().map(to_dto).collect())
+}
+
+/// Server function : liste **tous** les posts récents pour la modération admin
+/// (gated `is_staff`). Distincte de `get_timeline` (fil personnalisé), car
+/// l'admin doit voir l'ensemble des posts, pas seulement ceux qu'il suit.
+#[server(endpoint = "admin_list_posts")]
+pub async fn admin_list_posts() -> Result<Vec<FeedItemDto>, ServerFnError> {
+    let state = domain_state()?;
+    let claims = require_claims(&state).await?;
+    if !claims.is_staff {
+        return Err(ServerFnError::new("Réservé au staff"));
+    }
     let items = state
         .feed
-        .recent(viewer, 50)
+        .recent(None, 100)
         .await
         .map_err(|e| ServerFnError::new(e.to_string()))?;
-
     Ok(items.into_iter().map(to_dto).collect())
 }
 

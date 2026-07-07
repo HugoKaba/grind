@@ -315,6 +315,53 @@ mod tests {
             .unwrap();
         assert_ne!(resp.status(), StatusCode::OK);
 
+        // --- Fil personnalisé (following) + admin_list_posts ---
+        // ronaldo publie un post.
+        let resp = app
+            .clone()
+            .oneshot(form("/api/login", None, "username=ronaldo&password=grind1234"))
+            .await
+            .unwrap();
+        let ronaldo = session_of(&resp);
+        let resp = app
+            .clone()
+            .oneshot(form("/api/create_post", Some(&ronaldo), "content=Golazo de ronaldo"))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        // messi suit ronaldo → son fil personnalisé inclut désormais le post de ronaldo.
+        let resp = app
+            .clone()
+            .oneshot(form("/api/toggle_follow", Some(&messi), "username=ronaldo"))
+            .await
+            .unwrap();
+        assert!(body_string(resp).await.contains("\"following\":true"));
+        let resp = app
+            .clone()
+            .oneshot(form("/api/get_timeline", Some(&messi), ""))
+            .await
+            .unwrap();
+        assert!(
+            body_string(resp).await.contains("Golazo de ronaldo"),
+            "le fil de messi doit inclure les posts des personnes suivies"
+        );
+
+        // admin_list_posts : messi (staff) voit tout ; ronaldo (non-staff) refusé.
+        let resp = app
+            .clone()
+            .oneshot(form("/api/admin_list_posts", Some(&messi), ""))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        assert!(body_string(resp).await.contains("Golazo de ronaldo"));
+        let resp = app
+            .clone()
+            .oneshot(form("/api/admin_list_posts", Some(&ronaldo), ""))
+            .await
+            .unwrap();
+        assert_ne!(resp.status(), StatusCode::OK);
+
         // delete_post non-staff (ronaldo) → refusé
         let resp = app
             .clone()

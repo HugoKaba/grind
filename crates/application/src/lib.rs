@@ -131,6 +131,9 @@ pub trait FeedRepository: Send + Sync {
     /// Posts récents (hors réponses), joints à leur auteur, du plus récent au plus ancien.
     /// `viewer` = observateur courant (`None` si anonyme) → renseigne `liked_by_me`.
     async fn recent(&self, viewer: Option<UserId>, limit: u64) -> Result<Vec<FeedItem>, RepoError>;
+    /// Fil personnalisé : posts (hors réponses) des personnes que `viewer` suit,
+    /// **plus les siens**, du plus récent au plus ancien. Renseigne `liked_by_me`.
+    async fn following(&self, viewer: UserId, limit: u64) -> Result<Vec<FeedItem>, RepoError>;
     /// Un post par id (page détail).
     async fn by_id(&self, viewer: Option<UserId>, id: i64) -> Result<Option<FeedItem>, RepoError>;
     /// Réponses à un post (thread).
