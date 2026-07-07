@@ -133,3 +133,102 @@ async fn login_create_post_and_timeline_flow() {
     assert!(html.contains("GRIND"));
     assert!(html.contains("Golazo!"));
 }
+
+#[tokio::test]
+async fn admin_moderation_cookie_and_pages() {
+    let app = test_router().await;
+
+    // Login messi (staff) — vérifie is_staff + cookie de session émis.
+    let resp = app
+        .clone()
+        .oneshot(json_request(
+            "POST",
+            "/api/login",
+            None,
+            serde_json::json!({ "username": "messi", "password": "grind1234" }),
+        ))
+        .await
+        .unwrap();
+    assert!(resp.headers().get("set-cookie").is_some(), "cookie de session attendu");
+    let messi = body_json(resp).await;
+    assert_eq!(messi["is_staff"], true);
+    let messi_token = messi["token"].as_str().unwrap().to_owned();
+
+    // Login ronaldo (non-staff).
+    let resp = app
+        .clone()
+        .oneshot(json_request(
+            "POST",
+            "/api/login",
+            None,
+            serde_json::json!({ "username": "ronaldo", "password": "grind1234" }),
+        ))
+        .await
+        .unwrap();
+    let ronaldo = body_json(resp).await;
+    assert_eq!(ronaldo["is_staff"], false);
+    let ronaldo_token = ronaldo["token"].as_str().unwrap().to_owned();
+
+    // Auth par COOKIE : messi crée un post via le cookie de session (pas de Bearer).
+    let cookie_req = Request::builder()
+        .method("POST")
+        .uri("/api/posts")
+        .header("content-type", "application/json")
+        .header("cookie", format!("session={messi_token}"))
+        .body(Body::from(
+            serde_json::json!({ "content": "à modérer", "parent_id": null, "match_id": null }).to_string(),
+        ))
+        .unwrap();
+    let resp = app.clone().oneshot(cookie_req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let post = body_json(resp).await;
+    let post_id = post["id"].as_i64().unwrap();
+
+    // Non-staff ne peut pas modérer → 403.
+    let resp = app
+        .clone()
+        .oneshot(json_request(
+            "DELETE",
+            &format!("/api/admin/posts/{post_id}"),
+            Some(&ronaldo_token),
+            serde_json::json!({}),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+
+    // Sans token → 401.
+    let resp = app
+        .clone()
+        .oneshot(json_request("DELETE", &format!("/api/admin/posts/{post_id}"), None, serde_json::json!({})))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+
+    // Staff supprime → 200, puis 404 à la seconde tentative.
+    let del = |token: &str| {
+        json_request("DELETE", &format!("/api/admin/posts/{post_id}"), Some(token), serde_json::json!({}))
+    };
+    let resp = app.clone().oneshot(del(&messi_token)).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let resp = app.clone().oneshot(del(&messi_token)).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+
+    // Page profil (SSR).
+    let resp = app
+        .clone()
+        .oneshot(Request::builder().uri("/u/messi").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let html = String::from_utf8(resp.into_body().collect().await.unwrap().to_bytes().to_vec()).unwrap();
+    assert!(html.contains("messi"));
+
+    // Page détail d'un post inexistant → 404.
+    let resp = app
+        .clone()
+        .oneshot(Request::builder().uri("/post/999999").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+}

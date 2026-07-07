@@ -13,6 +13,7 @@ pub mod users {
         pub username: String,
         pub password: String,
         pub display_name: String,
+        pub is_staff: bool,
     }
 
     #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

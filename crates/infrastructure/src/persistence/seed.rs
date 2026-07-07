@@ -63,6 +63,7 @@ pub async fn seed_reference_and_athletes(
             username: Set(username.to_owned()),
             password: Set(password),
             display_name: Set(display_name.to_owned()),
+            is_staff: Set(username == "messi"), // messi = admin (démo)
             ..Default::default()
         }
         .insert(db)

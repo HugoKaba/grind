@@ -42,6 +42,9 @@ pub trait PostRepository: Send + Sync {
         content: &PostContent,
         parent: Option<PostId>,
     ) -> Result<Post, RepoError>;
+
+    /// Supprime un post (modération admin). `true` si une ligne a été supprimée.
+    async fn delete(&self, post: PostId) -> Result<bool, RepoError>;
 }
 
 #[async_trait]
@@ -73,6 +76,7 @@ pub struct AuthUserRecord {
     pub id: i64,
     pub username: String,
     pub password_hash: String,
+    pub is_staff: bool,
 }
 
 #[async_trait]
@@ -112,6 +116,12 @@ pub struct FeedItem {
 pub trait FeedRepository: Send + Sync {
     /// Posts récents (hors réponses), joints à leur auteur, du plus récent au plus ancien.
     async fn recent(&self, limit: u64) -> Result<Vec<FeedItem>, RepoError>;
+    /// Un post par id (page détail).
+    async fn by_id(&self, id: i64) -> Result<Option<FeedItem>, RepoError>;
+    /// Réponses à un post (thread).
+    async fn replies(&self, parent_id: i64, limit: u64) -> Result<Vec<FeedItem>, RepoError>;
+    /// Posts d'un auteur (page profil).
+    async fn by_author(&self, username: &str, limit: u64) -> Result<Vec<FeedItem>, RepoError>;
 }
 
 // ---------------------------------------------------------------------------
@@ -191,6 +201,7 @@ pub struct Login<'a, U: UserRepository + ?Sized, H: PasswordHasher + ?Sized> {
 pub struct LoginOutcome {
     pub user_id: i64,
     pub username: String,
+    pub is_staff: bool,
 }
 
 impl<'a, U: UserRepository + ?Sized, H: PasswordHasher + ?Sized> Login<'a, U, H> {
@@ -208,24 +219,40 @@ impl<'a, U: UserRepository + ?Sized, H: PasswordHasher + ?Sized> Login<'a, U, H>
             return Ok(None);
         };
 
+        let outcome = LoginOutcome {
+            user_id: record.id,
+            username: record.username.clone(),
+            is_staff: record.is_staff,
+        };
+
         match self.hasher.verify(password, &record.password_hash)? {
             PasswordCheck::Invalid => Ok(None),
-            PasswordCheck::Valid => Ok(Some(LoginOutcome {
-                user_id: record.id,
-                username: record.username,
-            })),
+            PasswordCheck::Valid => Ok(Some(outcome)),
             PasswordCheck::ValidNeedsRehash => {
                 // Modernisation transparente : on ré-écrit en argon2. Best-effort :
                 // un échec de re-hash ne doit pas empêcher la connexion.
                 if let Ok(new_hash) = self.hasher.hash(password) {
                     let _ = self.users.update_password(record.id, &new_hash).await;
                 }
-                Ok(Some(LoginOutcome {
-                    user_id: record.id,
-                    username: record.username,
-                }))
+                Ok(Some(outcome))
             }
         }
+    }
+}
+
+/// Supprime un post (modération). L'autorisation (staff) est vérifiée en amont
+/// par l'extractor `AdminUser` de la couche présentation.
+pub struct DeletePost<'a, R: PostRepository + ?Sized> {
+    repo: &'a R,
+}
+
+impl<'a, R: PostRepository + ?Sized> DeletePost<'a, R> {
+    pub fn new(repo: &'a R) -> Self {
+        Self { repo }
+    }
+
+    pub async fn execute(&self, post: PostId) -> Result<bool, AppError> {
+        Ok(self.repo.delete(post).await?)
     }
 }
 
@@ -263,6 +290,12 @@ mod tests {
             };
             rows.push(post.clone());
             Ok(post)
+        }
+        async fn delete(&self, post: PostId) -> Result<bool, RepoError> {
+            let mut rows = self.rows.lock().unwrap();
+            let before = rows.len();
+            rows.retain(|p| p.id != post);
+            Ok(rows.len() != before)
         }
     }
 
@@ -400,7 +433,12 @@ mod tests {
 
     fn user(hash: &str) -> InMemoryUsers {
         InMemoryUsers {
-            record: Some(AuthUserRecord { id: 1, username: "messi".into(), password_hash: hash.into() }),
+            record: Some(AuthUserRecord {
+                id: 1,
+                username: "messi".into(),
+                password_hash: hash.into(),
+                is_staff: true,
+            }),
             updated_to: Mutex::new(None),
         }
     }

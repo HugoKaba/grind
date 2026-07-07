@@ -43,6 +43,7 @@ mod m0001_init {
                     .col(ColumnDef::new(a("username")).string().not_null().unique_key())
                     .col(ColumnDef::new(a("password")).string().not_null())
                     .col(ColumnDef::new(a("display_name")).string().not_null().default(""))
+                    .col(ColumnDef::new(a("is_staff")).boolean().not_null().default(false))
                     .to_owned(),
             )
             .await?;

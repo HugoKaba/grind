@@ -100,6 +100,14 @@ impl PostRepository for SeaOrmPostRepository {
         txn.commit().await.map_err(db_err)?;
         to_domain_post(model)
     }
+
+    async fn delete(&self, post: PostId) -> Result<bool, RepoError> {
+        let res = post::Entity::delete_by_id(post.0)
+            .exec(&self.db)
+            .await
+            .map_err(db_err)?;
+        Ok(res.rows_affected > 0)
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -258,6 +266,7 @@ impl UserRepository for SeaOrmUserRepository {
             id: u.id,
             username: u.username,
             password_hash: u.password,
+            is_staff: u.is_staff,
         }))
     }
 
@@ -284,10 +293,42 @@ impl SeaOrmFeedRepository {
     }
 }
 
+/// Joint une liste de posts à leurs auteurs en **une** requête (évite le N+1).
+async fn join_authors(
+    db: &DatabaseConnection,
+    posts: Vec<post::Model>,
+) -> Result<Vec<FeedItem>, RepoError> {
+    if posts.is_empty() {
+        return Ok(Vec::new());
+    }
+    let author_ids: Vec<i64> = posts.iter().map(|p| p.author_id).collect();
+    let authors = users::Entity::find()
+        .filter(users::Column::Id.is_in(author_ids))
+        .all(db)
+        .await
+        .map_err(db_err)?;
+
+    Ok(posts
+        .into_iter()
+        .map(|p| {
+            let author = authors.iter().find(|u| u.id == p.author_id);
+            FeedItem {
+                id: p.id,
+                author_username: author.map(|u| u.username.clone()).unwrap_or_default(),
+                author_display: author.map(|u| u.display_name.clone()).unwrap_or_default(),
+                content: p.content,
+                likes_count: p.likes_count,
+                reposts_count: p.reposts_count,
+                replies_count: p.replies_count,
+                created_at: p.created_at.to_rfc3339(),
+            }
+        })
+        .collect())
+}
+
 #[async_trait]
 impl FeedRepository for SeaOrmFeedRepository {
     async fn recent(&self, limit: u64) -> Result<Vec<FeedItem>, RepoError> {
-        // 1) posts racines récents
         let posts = post::Entity::find()
             .filter(post::Column::ParentId.is_null())
             .order_by_desc(post::Column::CreatedAt)
@@ -295,37 +336,44 @@ impl FeedRepository for SeaOrmFeedRepository {
             .all(&self.db)
             .await
             .map_err(db_err)?;
+        join_authors(&self.db, posts).await
+    }
 
-        if posts.is_empty() {
-            return Ok(Vec::new());
-        }
+    async fn by_id(&self, id: i64) -> Result<Option<FeedItem>, RepoError> {
+        let Some(p) = post::Entity::find_by_id(id).one(&self.db).await.map_err(db_err)? else {
+            return Ok(None);
+        };
+        Ok(join_authors(&self.db, vec![p]).await?.into_iter().next())
+    }
 
-        // 2) auteurs en un seul aller-retour (évite le N+1)
-        let author_ids: Vec<i64> = posts.iter().map(|p| p.author_id).collect();
-        let authors = users::Entity::find()
-            .filter(users::Column::Id.is_in(author_ids))
+    async fn replies(&self, parent_id: i64, limit: u64) -> Result<Vec<FeedItem>, RepoError> {
+        let posts = post::Entity::find()
+            .filter(post::Column::ParentId.eq(parent_id))
+            .order_by_asc(post::Column::CreatedAt)
+            .limit(limit)
             .all(&self.db)
             .await
             .map_err(db_err)?;
+        join_authors(&self.db, posts).await
+    }
 
-        let items = posts
-            .into_iter()
-            .map(|p| {
-                let author = authors.iter().find(|u| u.id == p.author_id);
-                FeedItem {
-                    id: p.id,
-                    author_username: author.map(|u| u.username.clone()).unwrap_or_default(),
-                    author_display: author.map(|u| u.display_name.clone()).unwrap_or_default(),
-                    content: p.content,
-                    likes_count: p.likes_count,
-                    reposts_count: p.reposts_count,
-                    replies_count: p.replies_count,
-                    created_at: p.created_at.to_rfc3339(),
-                }
-            })
-            .collect();
-
-        Ok(items)
+    async fn by_author(&self, username: &str, limit: u64) -> Result<Vec<FeedItem>, RepoError> {
+        let Some(user) = users::Entity::find()
+            .filter(users::Column::Username.eq(username))
+            .one(&self.db)
+            .await
+            .map_err(db_err)?
+        else {
+            return Ok(Vec::new());
+        };
+        let posts = post::Entity::find()
+            .filter(post::Column::AuthorId.eq(user.id))
+            .order_by_desc(post::Column::CreatedAt)
+            .limit(limit)
+            .all(&self.db)
+            .await
+            .map_err(db_err)?;
+        join_authors(&self.db, posts).await
     }
 }
 
