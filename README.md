@@ -1,7 +1,8 @@
 # grind-rs — migration Rust (Leptos + Axum + SeaORM, Clean Architecture)
 
-Workspace de la réécriture de GRIND, **à la racine du repo**. Voir `MIGRATION_RUST.md`
-pour le plan complet. L'ancien projet Django vit dans `legacy-django/` (retiré au cutover).
+Workspace de la réécriture **full-Rust** de GRIND, à la racine du repo. Voir
+`MIGRATION_RUST.md` pour le plan complet. Le projet Django d'origine a été retiré au
+cutover : **plus aucun runtime Python** (l'historique git en garde la trace).
 
 ## Couches (règle de dépendance : extérieur → intérieur)
 
@@ -32,15 +33,22 @@ cargo leptos build      # compile le serveur SSR + le client WASM (hydratation)
 cargo leptos serve      # sert l'app hydratée sur http://127.0.0.1:3000
 ```
 
-`web/` réalise le pipeline **server functions + hydratation câblé sur les use cases réels** :
-- `get_timeline` (lecture), `login` (pose un cookie de session HttpOnly), `create_post`
-  (auth par cookie) — toutes câblées sur les use cases via `DomainState` injecté dans le
-  context Leptos ;
-- UI hydratée : formulaires (`ActionForm`) connexion + publication, fil `<Suspense>` qui se
-  recharge après chaque post, îlot compteur réactif.
+`web/` réalise le pipeline **server functions + hydratation câblé sur les use cases réels**.
+Chaque server function est un *controller* pur : elle (dé)sérialise le DTO, récupère les
+use cases via `DomainState` (injecté dans le context Leptos), appelle le use case, mappe la
+sortie. Aucune règle métier dans la couche présentation.
+
+Fonctionnalités (toutes câblées de bout en bout, testées aux 4 couches) :
+- **Auth** : `register` (+ auto-login), `login` (hybride PBKDF2 Django → argon2, cookie de
+  session HttpOnly), garde `is_staff`.
+- **Posts** : publication, réponse (thread), suppression (modération admin).
+- **Interactions** *viewer-aware* : like, repost, bookmark (état persistant `*_by_me`).
+- **Social** : follow/unfollow, fil « following » (suivis + soi) vs récent (anonyme).
+- **Sport** : catalogue sports/équipes, suivi d'équipe, fil de match (live), post-about-match.
+- **Messagerie** : DMs restreints aux personnes suivies, threads, conversations.
+- **Notifications** : générées à l'envoi d'un message, liste + marquage lu.
+- **Hashtags** : extraction auto des `#tags` à la publication + page trending.
 
 Routes SSR + hydratées : `/` (fil), `/post/:id` (détail + thread), `/u/:username` (profil),
-`/admin` (modération, `delete_post` réservé au staff via le cookie de session).
-
-Vérifié runtime : login → cookie ; create_post/delete_post gated ; pages détail/profil/admin
-rendues en SSR ; non-staff → « Réservé au staff ».
+`/sports`, `/trending`, `/team/:slug`, `/match/:id`, `/messages` (+ `/:username`),
+`/notifications`, `/admin`.

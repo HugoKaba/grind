@@ -4,54 +4,26 @@
 **/*.rs.bk
 Cargo.lock.bak
 
-# Python (legacy-django/)
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-env/
-venv/
-ENV/
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
+# cargo-leptos (artefacts de build front)
+/web/target
+/web/dist
 
-# Django
-*.log
-db.sqlite3
-media/
-staticfiles/
-local_settings.py
+# --- Env / secrets ---
+.env
+.env.local
 
-# IDE
+# --- IDE ---
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
-.DS_Store
-.env
-.env.local
 
-# Testing
-.coverage
-htmlcov/
-.pytest_cache/
-.tox/
-
-# OS
+# --- OS ---
 .DS_Store
 Thumbs.db
+
+# --- Python legacy (retiré du repo ; ignoré si un venv local subsiste) ---
+.venv/
+__pycache__/
+*.py[cod]
