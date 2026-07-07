@@ -13,6 +13,13 @@ leptos_router = { version = "0.7" }
 leptos_meta = { version = "0.7" }
 leptos_axum = { version = "0.7", optional = true }
 
+# DTOs partagés client/serveur (WASM-safe)
+grind-shared = { path = "../crates/shared" }
+# Couches serveur (server functions) — SSR uniquement
+grind-domain = { path = "../crates/domain", optional = true }
+grind-application = { path = "../crates/application", optional = true }
+grind-infrastructure = { path = "../crates/infrastructure", optional = true }
+
 axum = { version = "0.7", optional = true }
 tokio = { version = "1", features = ["rt-multi-thread", "macros"], optional = true }
 tower-http = { version = "0.6", features = ["fs"], optional = true }
@@ -28,6 +35,9 @@ ssr = [
     "dep:tokio",
     "dep:tower-http",
     "dep:leptos_axum",
+    "dep:grind-domain",
+    "dep:grind-application",
+    "dep:grind-infrastructure",
     "leptos/ssr",
     "leptos_meta/ssr",
     "leptos_router/ssr",

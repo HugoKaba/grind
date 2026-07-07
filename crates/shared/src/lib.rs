@@ -38,3 +38,16 @@ pub struct LoginRequest {
     pub username: String,
     pub password: String,
 }
+
+/// Élément de fil pour l'affichage (retour de server function, WASM-safe).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FeedItemDto {
+    pub id: i64,
+    pub author_username: String,
+    pub author_display: String,
+    pub content: String,
+    pub likes_count: i64,
+    pub reposts_count: i64,
+    pub replies_count: i64,
+    pub created_at: String,
+}
