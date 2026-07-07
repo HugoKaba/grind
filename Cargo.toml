@@ -5,7 +5,6 @@ members = [
     "crates/application",
     "crates/shared",
     "crates/infrastructure",
-    "app",
     "web",
 ]
 

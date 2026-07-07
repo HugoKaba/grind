@@ -11,18 +11,16 @@ pour le plan complet. L'ancien projet Django vit dans `legacy-django/` (retiré 
 | `crates/application` | Use cases + ports (traits) | domain |
 | `crates/infrastructure` | Adapters (auth PBKDF2→argon2, plus tard SeaORM/Redis) | domain, application |
 | `crates/shared` | DTOs serde partagés client/serveur | — |
-| `app/` | Présentation : Axum + Leptos SSR + auth JWT/cookie + admin (REST + pages SSR, testé) | tout |
-| `web/` | App Leptos **hydratée** full-stack (SSR + WASM + server functions), via `cargo-leptos` | leptos |
+| `web/` | Présentation : app Leptos **hydratée** full-stack (SSR + WASM + server functions), via `cargo-leptos` | tout |
 
 ## Build / test
 
 Le repo est sur iCloud → rediriger `target/` hors iCloud pour éviter les tempêtes de sync :
 
 ```sh
-export CARGO_TARGET_DIR=/tmp/grind-rs-target
-cargo test --workspace                 # tous les crates (24 tests)
-cargo test -p grind-infrastructure     # spike auth (vérif hash Django réel)
-cargo test -p grind-app                # intégration présentation→application→infra
+export CARGO_TARGET_DIR=/tmp/grind-rs-target   # target -> target.nosync (hors iCloud)
+cargo test --workspace                 # logique métier (domain/application/infrastructure)
+cargo test -p grind-infrastructure     # spike auth (vérif hash Django réel) + repos SeaORM
 ```
 
 ### Frontend hydraté (`web/`)
@@ -40,8 +38,8 @@ cargo leptos serve      # sert l'app hydratée sur http://127.0.0.1:3000
 - UI hydratée : formulaires (`ActionForm`) connexion + publication, fil `<Suspense>` qui se
   recharge après chaque post, îlot compteur réactif.
 
-Vérifié runtime : `login` → 200 + cookie ; `create_post` avec cookie → 200 puis le post
-apparaît dans le fil SSR ; sans cookie → « Non authentifié ».
+Routes SSR + hydratées : `/` (fil), `/post/:id` (détail + thread), `/u/:username` (profil),
+`/admin` (modération, `delete_post` réservé au staff via le cookie de session).
 
-Prochaines étapes : migrer les pages détail/profil + l'admin de `app/` vers `web/`,
-puis retirer `app/` (fusion).
+Vérifié runtime : login → cookie ; create_post/delete_post gated ; pages détail/profil/admin
+rendues en SSR ; non-staff → « Réservé au staff ».
