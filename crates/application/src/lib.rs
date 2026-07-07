@@ -5,7 +5,7 @@
 
 use async_trait::async_trait;
 use grind_domain::entities::{Follow, MatchId, Post, PostId, SportId, TeamId, UserId};
-use grind_domain::value_objects::{PostContent, Username};
+use grind_domain::value_objects::{MessageBody, PostContent, Username};
 use grind_domain::DomainError;
 
 /// Erreur d'un port d'infrastructure (BDD indisponible, contrainte, etc.).
@@ -250,6 +250,83 @@ pub trait TeamFollowRepository: Send + Sync {
 }
 
 // ---------------------------------------------------------------------------
+// Messagerie & notifications — read models + ports.
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MessageRow {
+    pub id: i64,
+    pub sender_username: String,
+    pub recipient_username: String,
+    pub body: String,
+    pub is_read: bool,
+    pub created_at: String,
+}
+
+/// Aperçu d'une conversation (interlocuteur + dernier message).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConversationRow {
+    pub other_username: String,
+    pub last_body: String,
+    pub created_at: String,
+}
+
+#[async_trait]
+pub trait MessageRepository: Send + Sync {
+    /// Persiste un message. Renvoie le `MessageRow` créé.
+    async fn send(&self, sender: UserId, recipient: UserId, body: &MessageBody)
+        -> Result<MessageRow, RepoError>;
+    /// Thread entre deux utilisateurs (chronologique).
+    async fn thread(&self, a: UserId, b: UserId, limit: u64) -> Result<Vec<MessageRow>, RepoError>;
+    /// Aperçu des conversations d'un utilisateur (dernier message par interlocuteur).
+    async fn conversations(&self, user: UserId) -> Result<Vec<ConversationRow>, RepoError>;
+}
+
+/// Type de notification (déclencheur).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NotificationKind {
+    Message,
+    Follow,
+    Reply,
+    Like,
+}
+
+impl NotificationKind {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            NotificationKind::Message => "message",
+            NotificationKind::Follow => "follow",
+            NotificationKind::Reply => "reply",
+            NotificationKind::Like => "like",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NotificationRow {
+    pub id: i64,
+    pub kind: String,
+    pub actor_username: String,
+    pub is_read: bool,
+    pub created_at: String,
+}
+
+#[async_trait]
+pub trait NotificationRepository: Send + Sync {
+    /// Crée une notification pour `recipient` déclenchée par `actor`.
+    async fn push(
+        &self,
+        recipient: UserId,
+        kind: NotificationKind,
+        actor: UserId,
+    ) -> Result<(), RepoError>;
+    /// Liste les notifications d'un utilisateur (récentes d'abord).
+    async fn list(&self, user: UserId, limit: u64) -> Result<Vec<NotificationRow>, RepoError>;
+    /// Marque toutes les notifications de l'utilisateur comme lues. Renvoie le nombre modifié.
+    async fn mark_all_read(&self, user: UserId) -> Result<u64, RepoError>;
+}
+
+// ---------------------------------------------------------------------------
 // Use cases — orchestrent domaine + ports. Zéro dépendance framework.
 // ---------------------------------------------------------------------------
 
@@ -476,6 +553,67 @@ impl<'a, P: PostRepository + ?Sized, M: MatchRepository + ?Sized> PostAboutMatch
             .insert_about_match(author, &content, SportId(m.sport_id), MatchId(m.id))
             .await?;
         Ok(post)
+    }
+}
+
+/// Envoie un message direct. Règles :
+/// - **domaine** : corps 1..=1000, pas de message à soi-même ;
+/// - **application** : restreint aux personnes que l'expéditeur suit (§2.2 du plan).
+/// Effet de bord : notifie le destinataire (port `NotificationRepository`).
+pub struct SendMessage<'a, M: MessageRepository + ?Sized, F: FollowRepository + ?Sized, N: NotificationRepository + ?Sized> {
+    messages: &'a M,
+    follows: &'a F,
+    notifications: &'a N,
+}
+
+impl<'a, M, F, N> SendMessage<'a, M, F, N>
+where
+    M: MessageRepository + ?Sized,
+    F: FollowRepository + ?Sized,
+    N: NotificationRepository + ?Sized,
+{
+    pub fn new(messages: &'a M, follows: &'a F, notifications: &'a N) -> Self {
+        Self { messages, follows, notifications }
+    }
+
+    pub async fn execute(
+        &self,
+        sender: UserId,
+        recipient: UserId,
+        raw_body: &str,
+    ) -> Result<MessageRow, AppError> {
+        if sender == recipient {
+            return Err(AppError::Domain(DomainError::SelfMessage));
+        }
+        let body = MessageBody::new(raw_body)?; // invariant 1..=1000
+        // Restriction produit : on ne peut écrire qu'à quelqu'un qu'on suit.
+        if !self.follows.exists(sender, recipient).await? {
+            return Err(AppError::Auth(
+                "vous ne pouvez écrire qu'aux personnes que vous suivez".into(),
+            ));
+        }
+        let msg = self.messages.send(sender, recipient, &body).await?;
+        // Notifie le destinataire (best-effort : un échec de notif ne casse pas l'envoi).
+        let _ = self
+            .notifications
+            .push(recipient, NotificationKind::Message, sender)
+            .await;
+        Ok(msg)
+    }
+}
+
+/// Marque toutes les notifications de l'utilisateur comme lues.
+pub struct MarkNotificationsRead<'a, R: NotificationRepository + ?Sized> {
+    repo: &'a R,
+}
+
+impl<'a, R: NotificationRepository + ?Sized> MarkNotificationsRead<'a, R> {
+    pub fn new(repo: &'a R) -> Self {
+        Self { repo }
+    }
+
+    pub async fn execute(&self, user: UserId) -> Result<u64, AppError> {
+        Ok(self.repo.mark_all_read(user).await?)
     }
 }
 
@@ -1111,5 +1249,95 @@ mod tests {
         assert!(matches!(err, AppError::Auth(_)));
         // Rien n'a été créé.
         assert!(users.by_username("newpro").await.unwrap().is_none());
+    }
+
+    #[derive(Default)]
+    struct InMemoryMessages {
+        rows: Mutex<Vec<(UserId, UserId, String)>>,
+    }
+    #[async_trait]
+    impl MessageRepository for InMemoryMessages {
+        async fn send(
+            &self,
+            sender: UserId,
+            recipient: UserId,
+            body: &MessageBody,
+        ) -> Result<MessageRow, RepoError> {
+            let mut rows = self.rows.lock().unwrap();
+            rows.push((sender, recipient, body.as_str().to_owned()));
+            Ok(MessageRow {
+                id: rows.len() as i64,
+                sender_username: format!("u{}", sender.0),
+                recipient_username: format!("u{}", recipient.0),
+                body: body.as_str().to_owned(),
+                is_read: false,
+                created_at: String::new(),
+            })
+        }
+        async fn thread(&self, _a: UserId, _b: UserId, _l: u64) -> Result<Vec<MessageRow>, RepoError> {
+            Ok(Vec::new())
+        }
+        async fn conversations(&self, _u: UserId) -> Result<Vec<ConversationRow>, RepoError> {
+            Ok(Vec::new())
+        }
+    }
+
+    #[derive(Default)]
+    struct InMemoryNotifications {
+        pushed: Mutex<Vec<(UserId, String, UserId)>>,
+    }
+    #[async_trait]
+    impl NotificationRepository for InMemoryNotifications {
+        async fn push(
+            &self,
+            recipient: UserId,
+            kind: NotificationKind,
+            actor: UserId,
+        ) -> Result<(), RepoError> {
+            self.pushed.lock().unwrap().push((recipient, kind.as_str().to_owned(), actor));
+            Ok(())
+        }
+        async fn list(&self, _u: UserId, _l: u64) -> Result<Vec<NotificationRow>, RepoError> {
+            Ok(Vec::new())
+        }
+        async fn mark_all_read(&self, _u: UserId) -> Result<u64, RepoError> {
+            Ok(0)
+        }
+    }
+
+    #[tokio::test]
+    async fn send_message_requires_follow_and_notifies() {
+        let messages = InMemoryMessages::default();
+        let follows = InMemoryFollows::default();
+        let notifs = InMemoryNotifications::default();
+
+        // 1 suit 2.
+        follows.add(&Follow::new(UserId(1), UserId(2)).unwrap()).await.unwrap();
+        let uc = SendMessage::new(&messages, &follows, &notifs);
+
+        // Message à soi-même → refusé (domaine).
+        let err = uc.execute(UserId(1), UserId(1), "coucou").await.unwrap_err();
+        assert_eq!(err, AppError::Domain(DomainError::SelfMessage));
+
+        // Écrire à quelqu'un qu'on ne suit pas (3) → refusé (politique).
+        let err = uc.execute(UserId(1), UserId(3), "hello").await.unwrap_err();
+        assert!(matches!(err, AppError::Auth(_)));
+
+        // Écrire à un suivi (2) → OK + notification poussée au destinataire.
+        let msg = uc.execute(UserId(1), UserId(2), "  Bien joué !  ").await.unwrap();
+        assert_eq!(msg.body, "Bien joué !");
+        let pushed = notifs.pushed.lock().unwrap();
+        assert_eq!(pushed.as_slice(), &[(UserId(2), "message".to_owned(), UserId(1))]);
+    }
+
+    #[tokio::test]
+    async fn send_message_rejects_empty_body() {
+        let messages = InMemoryMessages::default();
+        let follows = InMemoryFollows::default();
+        let notifs = InMemoryNotifications::default();
+        follows.add(&Follow::new(UserId(1), UserId(2)).unwrap()).await.unwrap();
+        let uc = SendMessage::new(&messages, &follows, &notifs);
+        let err = uc.execute(UserId(1), UserId(2), "   ").await.unwrap_err();
+        assert_eq!(err, AppError::Domain(DomainError::InvalidMessageBody));
     }
 }

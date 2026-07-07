@@ -5,13 +5,14 @@ use std::sync::Arc;
 
 use grind_application::{
     BookmarkRepository, FeedRepository, FollowRepository, LikeRepository, MatchRepository,
-    PasswordHasher, PostRepository, RepostRepository, SportCatalog, TeamFollowRepository,
-    UserRepository,
+    MessageRepository, NotificationRepository, PasswordHasher, PostRepository, RepostRepository,
+    SportCatalog, TeamFollowRepository, UserRepository,
 };
 use grind_infrastructure::persistence::{
     DatabaseConnection, SeaOrmBookmarkRepository, SeaOrmFeedRepository, SeaOrmFollowRepository,
-    SeaOrmLikeRepository, SeaOrmMatchRepository, SeaOrmPostRepository, SeaOrmRepostRepository,
-    SeaOrmSportCatalog, SeaOrmTeamFollowRepository, SeaOrmUserRepository,
+    SeaOrmLikeRepository, SeaOrmMatchRepository, SeaOrmMessageRepository,
+    SeaOrmNotificationRepository, SeaOrmPostRepository, SeaOrmRepostRepository, SeaOrmSportCatalog,
+    SeaOrmTeamFollowRepository, SeaOrmUserRepository,
 };
 use grind_infrastructure::security::PasswordService;
 
@@ -26,6 +27,8 @@ pub struct DomainState {
     pub catalog: Arc<dyn SportCatalog>,
     pub matches: Arc<dyn MatchRepository>,
     pub team_follows: Arc<dyn TeamFollowRepository>,
+    pub messages: Arc<dyn MessageRepository>,
+    pub notifications: Arc<dyn NotificationRepository>,
     pub users: Arc<dyn UserRepository>,
     pub hasher: Arc<dyn PasswordHasher>,
     pub jwt_secret: Arc<String>,
@@ -43,6 +46,8 @@ impl DomainState {
             catalog: Arc::new(SeaOrmSportCatalog::new(db.clone())),
             matches: Arc::new(SeaOrmMatchRepository::new(db.clone())),
             team_follows: Arc::new(SeaOrmTeamFollowRepository::new(db.clone())),
+            messages: Arc::new(SeaOrmMessageRepository::new(db.clone())),
+            notifications: Arc::new(SeaOrmNotificationRepository::new(db.clone())),
             users: Arc::new(SeaOrmUserRepository::new(db)),
             hasher: Arc::new(PasswordService::new()),
             jwt_secret: Arc::new(jwt_secret),

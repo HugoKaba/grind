@@ -465,6 +465,58 @@ mod tests {
             .unwrap();
         assert_ne!(resp.status(), StatusCode::OK);
 
+        // --- Messagerie & notifications ---
+        // (à ce stade messi suit ronaldo → il peut lui écrire)
+        // send_message sans cookie → refusé.
+        let resp = app
+            .clone()
+            .oneshot(form("/api/send_message", None, "recipient=ronaldo&body=hi"))
+            .await
+            .unwrap();
+        assert_ne!(resp.status(), StatusCode::OK);
+
+        // messi écrit à ronaldo (suivi) → 200.
+        let resp = app
+            .clone()
+            .oneshot(form("/api/send_message", Some(&messi), "recipient=ronaldo&body=Bien joue hier"))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        // messi écrit à newpro (non suivi) → refusé (restriction produit).
+        let resp = app
+            .clone()
+            .oneshot(form("/api/send_message", Some(&messi), "recipient=newpro&body=coucou"))
+            .await
+            .unwrap();
+        assert_ne!(resp.status(), StatusCode::OK);
+
+        // Le thread messi↔ronaldo contient le message.
+        let resp = app
+            .clone()
+            .oneshot(form("/api/get_thread", Some(&messi), "username=ronaldo"))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        assert!(body_string(resp).await.contains("Bien joue hier"));
+
+        // ronaldo a reçu une notification de type "message".
+        let resp = app
+            .clone()
+            .oneshot(form("/api/get_notifications", Some(&ronaldo), ""))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        assert!(body_string(resp).await.contains("\"kind\":\"message\""));
+
+        // ronaldo marque tout comme lu → 200.
+        let resp = app
+            .clone()
+            .oneshot(form("/api/mark_notifications_read", Some(&ronaldo), ""))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
         // delete_post non-staff (ronaldo) → refusé
         let resp = app
             .clone()

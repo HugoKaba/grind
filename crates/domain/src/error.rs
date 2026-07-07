@@ -19,4 +19,10 @@ pub enum DomainError {
 
     #[error("a professional athlete must belong to a team")]
     ProWithoutTeam,
+
+    #[error("message body must be 1..=1000 characters")]
+    InvalidMessageBody,
+
+    #[error("a user cannot message themselves")]
+    SelfMessage,
 }

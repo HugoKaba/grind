@@ -228,3 +228,45 @@ pub mod team_follow {
 
     impl ActiveModelBehavior for ActiveModel {}
 }
+
+pub mod message {
+    use sea_orm::entity::prelude::*;
+
+    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
+    #[sea_orm(table_name = "message")]
+    pub struct Model {
+        #[sea_orm(primary_key)]
+        pub id: i64,
+        pub sender_id: i64,
+        pub recipient_id: i64,
+        pub body: String,
+        pub is_read: bool,
+        pub created_at: DateTimeUtc,
+    }
+
+    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
+    pub enum Relation {}
+
+    impl ActiveModelBehavior for ActiveModel {}
+}
+
+pub mod notification {
+    use sea_orm::entity::prelude::*;
+
+    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
+    #[sea_orm(table_name = "notification")]
+    pub struct Model {
+        #[sea_orm(primary_key)]
+        pub id: i64,
+        pub user_id: i64,
+        pub kind: String,
+        pub actor_id: i64,
+        pub is_read: bool,
+        pub created_at: DateTimeUtc,
+    }
+
+    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
+    pub enum Relation {}
+
+    impl ActiveModelBehavior for ActiveModel {}
+}

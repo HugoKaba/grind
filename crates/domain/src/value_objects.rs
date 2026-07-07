@@ -49,6 +49,28 @@ impl PostContent {
     }
 }
 
+/// Corps d'un message direct : 1..=1000 caractères (compté en `char`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MessageBody(String);
+
+impl MessageBody {
+    pub const MAX: usize = 1000;
+
+    pub fn new(raw: impl Into<String>) -> Result<Self, DomainError> {
+        let s = raw.into();
+        let trimmed = s.trim();
+        let len = trimmed.chars().count();
+        if len == 0 || len > Self::MAX {
+            return Err(DomainError::InvalidMessageBody);
+        }
+        Ok(Self(trimmed.to_string()))
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
 /// Nom d'utilisateur : 1..=30 caractères `[a-z0-9_]`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Username(String);
@@ -126,5 +148,13 @@ mod tests {
     fn slugify_basic() {
         assert_eq!(slugify("Champions League"), "champions-league");
         assert_eq!(slugify("  Réal  Madrid!! "), "réal-madrid");
+    }
+
+    #[test]
+    fn message_body_bounds() {
+        assert_eq!(MessageBody::new("   ").unwrap_err(), DomainError::InvalidMessageBody);
+        assert!(MessageBody::new("Salut !").is_ok());
+        assert!(MessageBody::new("a".repeat(1000)).is_ok());
+        assert!(MessageBody::new("a".repeat(1001)).is_err());
     }
 }

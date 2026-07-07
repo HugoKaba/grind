@@ -163,3 +163,31 @@ pub struct MatchPageDto {
     pub game: MatchDto,
     pub posts: Vec<FeedItemDto>,
 }
+
+// --- Messagerie & notifications (WASM-safe) ---
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MessageDto {
+    pub id: i64,
+    pub sender_username: String,
+    pub recipient_username: String,
+    pub body: String,
+    pub is_read: bool,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ConversationDto {
+    pub other_username: String,
+    pub last_body: String,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NotificationDto {
+    pub id: i64,
+    pub kind: String,
+    pub actor_username: String,
+    pub is_read: bool,
+    pub created_at: String,
+}

@@ -12,8 +12,9 @@ use leptos_router::hooks::use_params_map;
 use leptos_router::path;
 
 use grind_shared::{
-    BookmarkStateDto, CatalogDto, FeedItemDto, FollowStateDto, LikeStateDto, LoginDto, MatchPageDto,
-    ProfileDto, RepostStateDto, TeamFollowStateDto, TeamPageDto,
+    BookmarkStateDto, CatalogDto, ConversationDto, FeedItemDto, FollowStateDto, LikeStateDto,
+    LoginDto, MatchPageDto, MessageDto, NotificationDto, ProfileDto, RepostStateDto,
+    TeamFollowStateDto, TeamPageDto,
 };
 // DTOs uniquement nommés dans les mappers SSR (server fns) → gated pour éviter
 // un warning d'import inutilisé côté client WASM.
@@ -55,6 +56,7 @@ pub fn App() -> impl IntoView {
         <Router>
             <nav>
                 <A href="/">"Accueil"</A>" · "<A href="/sports">"Sports"</A>" · "
+                <A href="/messages">"Messages"</A>" · "<A href="/notifications">"Notifs"</A>" · "
                 <A href="/admin">"Admin"</A>
             </nav>
             <main>
@@ -65,6 +67,9 @@ pub fn App() -> impl IntoView {
                     <Route path=path!("/sports") view=Sports />
                     <Route path=path!("/team/:slug") view=Team />
                     <Route path=path!("/match/:id") view=MatchPage />
+                    <Route path=path!("/messages") view=Messages />
+                    <Route path=path!("/messages/:username") view=Thread />
+                    <Route path=path!("/notifications") view=Notifications />
                     <Route path=path!("/admin") view=Admin />
                 </Routes>
             </main>
@@ -481,6 +486,126 @@ fn MatchPage() -> impl IntoView {
                         }
                         Ok(None) => view! { <p>"Match introuvable."</p> }.into_any(),
                         Err(e) => view! { <p>"Erreur : " {e.to_string()}</p> }.into_any(),
+                    })
+            }}
+        </Suspense>
+    }
+}
+
+#[component]
+fn Messages() -> impl IntoView {
+    let convs = Resource::new(|| (), |_| get_conversations());
+    view! {
+        <h1>"✉️ Messages"</h1>
+        <Suspense fallback=|| view! { <p>"Chargement…"</p> }>
+            {move || {
+                convs
+                    .get()
+                    .map(|res| match res {
+                        Ok(list) => {
+                            view! {
+                                <ul class="conversations">
+                                    {list
+                                        .into_iter()
+                                        .map(|c| {
+                                            let href = format!("/messages/{}", c.other_username);
+                                            view! {
+                                                <li>
+                                                    <A href=href>"@"{c.other_username}</A>
+                                                    " — "{c.last_body}
+                                                </li>
+                                            }
+                                        })
+                                        .collect_view()}
+                                </ul>
+                            }
+                                .into_any()
+                        }
+                        Err(e) => view! { <p>"Erreur (connectez-vous) : " {e.to_string()}</p> }.into_any(),
+                    })
+            }}
+        </Suspense>
+    }
+}
+
+#[component]
+fn Thread() -> impl IntoView {
+    let params = use_params_map();
+    let username = move || params.read().get("username").unwrap_or_default();
+    let send = ServerAction::<SendMessage>::new();
+    let thread = Resource::new(
+        move || (username(), send.version().get()),
+        |(name, _)| async move { get_thread(name).await },
+    );
+    view! {
+        <h1>"✉️ Conversation avec @"{username}</h1>
+        <ActionForm action=send>
+            <input type="hidden" name="recipient" value=username />
+            <input type="text" name="body" placeholder="Votre message…" />
+            <button type="submit">"Envoyer"</button>
+        </ActionForm>
+        <p>
+            {move || match send.value().get() {
+                Some(Ok(())) => String::new(),
+                Some(Err(e)) => format!("Échec : {e}"),
+                None => String::new(),
+            }}
+        </p>
+        <Suspense fallback=|| view! { <p>"Chargement…"</p> }>
+            {move || {
+                thread
+                    .get()
+                    .map(|res| match res {
+                        Ok(msgs) => {
+                            view! {
+                                <ul class="thread">
+                                    {msgs
+                                        .into_iter()
+                                        .map(|m| view! { <li><strong>"@"{m.sender_username}</strong>" : "{m.body}</li> })
+                                        .collect_view()}
+                                </ul>
+                            }
+                                .into_any()
+                        }
+                        Err(e) => view! { <p>"Erreur (connectez-vous) : " {e.to_string()}</p> }.into_any(),
+                    })
+            }}
+        </Suspense>
+    }
+}
+
+#[component]
+fn Notifications() -> impl IntoView {
+    let mark = ServerAction::<MarkNotificationsRead>::new();
+    let list = Resource::new(move || mark.version().get(), |_| get_notifications());
+    view! {
+        <h1>"🔔 Notifications"</h1>
+        <ActionForm action=mark>
+            <button type="submit">"Tout marquer comme lu"</button>
+        </ActionForm>
+        <Suspense fallback=|| view! { <p>"Chargement…"</p> }>
+            {move || {
+                list.get()
+                    .map(|res| match res {
+                        Ok(items) => {
+                            view! {
+                                <ul class="notifications">
+                                    {items
+                                        .into_iter()
+                                        .map(|n| {
+                                            let read = if n.is_read { "lu" } else { "non lu" };
+                                            view! {
+                                                <li>
+                                                    "@"{n.actor_username}" — "{n.kind}" ("{read}")"
+                                                </li>
+                                            }
+                                        })
+                                        .collect_view()}
+                                </ul>
+                            }
+                                .into_any()
+                        }
+                        Err(e) => view! { <p>"Erreur (connectez-vous) : " {e.to_string()}</p> }.into_any(),
                     })
             }}
         </Suspense>
@@ -955,6 +1080,120 @@ pub async fn post_about_match(match_id: i64, content: String) -> Result<(), Serv
     let claims = require_claims(&state).await?;
     grind_application::PostAboutMatch::new(&*state.posts, &*state.matches)
         .execute(grind_domain::entities::UserId(claims.sub), &content, match_id)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?;
+    Ok(())
+}
+
+// --- Messagerie & notifications ---
+
+/// Server function : envoie un DM (restreint aux suivis, via `SendMessage`).
+/// Résout le username destinataire → id (mapping controller).
+#[server(endpoint = "send_message")]
+pub async fn send_message(recipient: String, body: String) -> Result<(), ServerFnError> {
+    let state = domain_state()?;
+    let claims = require_claims(&state).await?;
+    let target = state
+        .users
+        .by_username(&recipient)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?
+        .ok_or_else(|| ServerFnError::new("Destinataire introuvable"))?;
+
+    grind_application::SendMessage::new(&*state.messages, &*state.follows, &*state.notifications)
+        .execute(
+            grind_domain::entities::UserId(claims.sub),
+            grind_domain::entities::UserId(target.id),
+            &body,
+        )
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?;
+    Ok(())
+}
+
+/// Server function : thread de messages entre l'utilisateur connecté et `username`.
+#[server(endpoint = "get_thread")]
+pub async fn get_thread(username: String) -> Result<Vec<MessageDto>, ServerFnError> {
+    let state = domain_state()?;
+    let claims = require_claims(&state).await?;
+    let other = state
+        .users
+        .by_username(&username)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?
+        .ok_or_else(|| ServerFnError::new("Utilisateur introuvable"))?;
+
+    let rows = state
+        .messages
+        .thread(
+            grind_domain::entities::UserId(claims.sub),
+            grind_domain::entities::UserId(other.id),
+            100,
+        )
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?;
+    Ok(rows
+        .into_iter()
+        .map(|m| MessageDto {
+            id: m.id,
+            sender_username: m.sender_username,
+            recipient_username: m.recipient_username,
+            body: m.body,
+            is_read: m.is_read,
+            created_at: m.created_at,
+        })
+        .collect())
+}
+
+/// Server function : aperçu des conversations de l'utilisateur connecté.
+#[server(endpoint = "get_conversations")]
+pub async fn get_conversations() -> Result<Vec<ConversationDto>, ServerFnError> {
+    let state = domain_state()?;
+    let claims = require_claims(&state).await?;
+    let rows = state
+        .messages
+        .conversations(grind_domain::entities::UserId(claims.sub))
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?;
+    Ok(rows
+        .into_iter()
+        .map(|c| ConversationDto {
+            other_username: c.other_username,
+            last_body: c.last_body,
+            created_at: c.created_at,
+        })
+        .collect())
+}
+
+/// Server function : notifications de l'utilisateur connecté (récentes d'abord).
+#[server(endpoint = "get_notifications")]
+pub async fn get_notifications() -> Result<Vec<NotificationDto>, ServerFnError> {
+    let state = domain_state()?;
+    let claims = require_claims(&state).await?;
+    let rows = state
+        .notifications
+        .list(grind_domain::entities::UserId(claims.sub), 50)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?;
+    Ok(rows
+        .into_iter()
+        .map(|n| NotificationDto {
+            id: n.id,
+            kind: n.kind,
+            actor_username: n.actor_username,
+            is_read: n.is_read,
+            created_at: n.created_at,
+        })
+        .collect())
+}
+
+/// Server function : marque toutes les notifications comme lues (`MarkNotificationsRead`).
+#[server(endpoint = "mark_notifications_read")]
+pub async fn mark_notifications_read() -> Result<(), ServerFnError> {
+    let state = domain_state()?;
+    let claims = require_claims(&state).await?;
+    grind_application::MarkNotificationsRead::new(&*state.notifications)
+        .execute(grind_domain::entities::UserId(claims.sub))
         .await
         .map_err(|e| ServerFnError::new(e.to_string()))?;
     Ok(())

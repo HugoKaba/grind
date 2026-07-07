@@ -13,6 +13,7 @@ impl MigratorTrait for Migrator {
         vec![
             Box::new(m0001_init::Migration),
             Box::new(m0002_repost_bookmark::Migration),
+            Box::new(m0003_messaging::Migration),
         ]
     }
 }
@@ -280,6 +281,82 @@ mod m0002_repost_bookmark {
 
         async fn down(&self, m: &SchemaManager) -> Result<(), DbErr> {
             for t in ["bookmark", "repost"] {
+                m.drop_table(Table::drop().table(a(t)).if_exists().to_owned()).await?;
+            }
+            Ok(())
+        }
+    }
+}
+
+/// Messagerie directe + notifications.
+mod m0003_messaging {
+    use super::a;
+    use sea_orm_migration::prelude::*;
+
+    pub struct Migration;
+
+    impl MigrationName for Migration {
+        fn name(&self) -> &str {
+            "m0003_messaging"
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl MigrationTrait for Migration {
+        async fn up(&self, m: &SchemaManager) -> Result<(), DbErr> {
+            // message (DM)
+            m.create_table(
+                Table::create()
+                    .table(a("message"))
+                    .if_not_exists()
+                    .col(ColumnDef::new(a("id")).big_integer().not_null().auto_increment().primary_key())
+                    .col(ColumnDef::new(a("sender_id")).big_integer().not_null())
+                    .col(ColumnDef::new(a("recipient_id")).big_integer().not_null())
+                    .col(ColumnDef::new(a("body")).string().not_null())
+                    .col(ColumnDef::new(a("is_read")).boolean().not_null().default(false))
+                    .col(ColumnDef::new(a("created_at")).timestamp_with_time_zone().not_null())
+                    .to_owned(),
+            )
+            .await?;
+            m.create_index(
+                Index::create()
+                    .if_not_exists()
+                    .name("idx_message_pair")
+                    .table(a("message"))
+                    .col(a("sender_id"))
+                    .col(a("recipient_id"))
+                    .to_owned(),
+            )
+            .await?;
+
+            // notification
+            m.create_table(
+                Table::create()
+                    .table(a("notification"))
+                    .if_not_exists()
+                    .col(ColumnDef::new(a("id")).big_integer().not_null().auto_increment().primary_key())
+                    .col(ColumnDef::new(a("user_id")).big_integer().not_null())
+                    .col(ColumnDef::new(a("kind")).string().not_null())
+                    .col(ColumnDef::new(a("actor_id")).big_integer().not_null())
+                    .col(ColumnDef::new(a("is_read")).boolean().not_null().default(false))
+                    .col(ColumnDef::new(a("created_at")).timestamp_with_time_zone().not_null())
+                    .to_owned(),
+            )
+            .await?;
+            m.create_index(
+                Index::create()
+                    .if_not_exists()
+                    .name("idx_notification_user")
+                    .table(a("notification"))
+                    .col(a("user_id"))
+                    .to_owned(),
+            )
+            .await?;
+            Ok(())
+        }
+
+        async fn down(&self, m: &SchemaManager) -> Result<(), DbErr> {
+            for t in ["notification", "message"] {
                 m.drop_table(Table::drop().table(a(t)).if_exists().to_owned()).await?;
             }
             Ok(())

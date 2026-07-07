@@ -6,20 +6,23 @@ use async_trait::async_trait;
 use chrono::Utc;
 use sea_orm::sea_query::Expr;
 use sea_orm::{
-    ActiveModelTrait, ColumnTrait, ConnectionTrait, DatabaseConnection, DbErr, EntityTrait,
-    QueryFilter, QueryOrder, QuerySelect, Set, TransactionTrait,
+    ActiveModelTrait, ColumnTrait, Condition, ConnectionTrait, DatabaseConnection, DbErr,
+    EntityTrait, QueryFilter, QueryOrder, QuerySelect, Set, TransactionTrait,
 };
 
 use grind_application::{
-    AuthUserRecord, BookmarkRepository, FeedItem, FeedRepository, FollowRepository, LikeRepository,
-    LikeToggle, MatchRepository, MatchRow, PostRepository, RepoError, RepostRepository,
-    RepostToggle, SportCatalog, SportRow, TeamFollowRepository, TeamRow, UserRepository,
+    AuthUserRecord, BookmarkRepository, ConversationRow, FeedItem, FeedRepository, FollowRepository,
+    LikeRepository, LikeToggle, MatchRepository, MatchRow, MessageRepository, MessageRow,
+    NotificationKind, NotificationRepository, NotificationRow, PostRepository, RepoError,
+    RepostRepository, RepostToggle, SportCatalog, SportRow, TeamFollowRepository, TeamRow,
+    UserRepository,
 };
 use grind_domain::entities::{Follow, MatchId, Post, PostId, SportId, TeamId, UserId};
-use grind_domain::value_objects::PostContent;
+use grind_domain::value_objects::{MessageBody, PostContent};
 
 use super::entities::{
-    bookmark, follow, match_event, post, post_like, repost, sport, team, team_follow, users,
+    bookmark, follow, match_event, message, notification, post, post_like, repost, sport, team,
+    team_follow, users,
 };
 
 fn db_err(e: DbErr) -> RepoError {
@@ -858,6 +861,206 @@ impl TeamFollowRepository for SeaOrmTeamFollowRepository {
     }
 }
 
+// ---------------------------------------------------------------------------
+
+/// Résout les noms d'utilisateur pour un ensemble d'ids, en une requête.
+async fn usernames_by_ids(
+    db: &DatabaseConnection,
+    ids: Vec<i64>,
+) -> Result<std::collections::HashMap<i64, String>, RepoError> {
+    if ids.is_empty() {
+        return Ok(std::collections::HashMap::new());
+    }
+    let rows = users::Entity::find()
+        .filter(users::Column::Id.is_in(ids))
+        .all(db)
+        .await
+        .map_err(db_err)?;
+    Ok(rows.into_iter().map(|u| (u.id, u.username)).collect())
+}
+
+pub struct SeaOrmMessageRepository {
+    db: DatabaseConnection,
+}
+
+impl SeaOrmMessageRepository {
+    pub fn new(db: DatabaseConnection) -> Self {
+        Self { db }
+    }
+}
+
+#[async_trait]
+impl MessageRepository for SeaOrmMessageRepository {
+    async fn send(
+        &self,
+        sender: UserId,
+        recipient: UserId,
+        body: &MessageBody,
+    ) -> Result<MessageRow, RepoError> {
+        let model = message::ActiveModel {
+            sender_id: Set(sender.0),
+            recipient_id: Set(recipient.0),
+            body: Set(body.as_str().to_owned()),
+            is_read: Set(false),
+            created_at: Set(Utc::now()),
+            ..Default::default()
+        }
+        .insert(&self.db)
+        .await
+        .map_err(db_err)?;
+
+        let names = usernames_by_ids(&self.db, vec![sender.0, recipient.0]).await?;
+        Ok(MessageRow {
+            id: model.id,
+            sender_username: names.get(&sender.0).cloned().unwrap_or_default(),
+            recipient_username: names.get(&recipient.0).cloned().unwrap_or_default(),
+            body: model.body,
+            is_read: model.is_read,
+            created_at: model.created_at.to_rfc3339(),
+        })
+    }
+
+    async fn thread(&self, a: UserId, b: UserId, limit: u64) -> Result<Vec<MessageRow>, RepoError> {
+        // Messages a→b OU b→a, chronologiques.
+        let rows = message::Entity::find()
+            .filter(
+                Condition::any()
+                    .add(
+                        Condition::all()
+                            .add(message::Column::SenderId.eq(a.0))
+                            .add(message::Column::RecipientId.eq(b.0)),
+                    )
+                    .add(
+                        Condition::all()
+                            .add(message::Column::SenderId.eq(b.0))
+                            .add(message::Column::RecipientId.eq(a.0)),
+                    ),
+            )
+            .order_by_asc(message::Column::CreatedAt)
+            .limit(limit)
+            .all(&self.db)
+            .await
+            .map_err(db_err)?;
+
+        let names = usernames_by_ids(&self.db, vec![a.0, b.0]).await?;
+        let name = |id: i64| names.get(&id).cloned().unwrap_or_default();
+        Ok(rows
+            .into_iter()
+            .map(|m| MessageRow {
+                id: m.id,
+                sender_username: name(m.sender_id),
+                recipient_username: name(m.recipient_id),
+                body: m.body,
+                is_read: m.is_read,
+                created_at: m.created_at.to_rfc3339(),
+            })
+            .collect())
+    }
+
+    async fn conversations(&self, user: UserId) -> Result<Vec<ConversationRow>, RepoError> {
+        // Tous les messages impliquant `user`, récents d'abord ; on garde le
+        // dernier par interlocuteur (dédup applicative simple).
+        let rows = message::Entity::find()
+            .filter(
+                Condition::any()
+                    .add(message::Column::SenderId.eq(user.0))
+                    .add(message::Column::RecipientId.eq(user.0)),
+            )
+            .order_by_desc(message::Column::CreatedAt)
+            .all(&self.db)
+            .await
+            .map_err(db_err)?;
+
+        let other_ids: Vec<i64> = rows
+            .iter()
+            .map(|m| if m.sender_id == user.0 { m.recipient_id } else { m.sender_id })
+            .collect();
+        let names = usernames_by_ids(&self.db, other_ids).await?;
+
+        let mut seen = std::collections::HashSet::new();
+        let mut out = Vec::new();
+        for m in rows {
+            let other = if m.sender_id == user.0 { m.recipient_id } else { m.sender_id };
+            if seen.insert(other) {
+                out.push(ConversationRow {
+                    other_username: names.get(&other).cloned().unwrap_or_default(),
+                    last_body: m.body,
+                    created_at: m.created_at.to_rfc3339(),
+                });
+            }
+        }
+        Ok(out)
+    }
+}
+
+// ---------------------------------------------------------------------------
+
+pub struct SeaOrmNotificationRepository {
+    db: DatabaseConnection,
+}
+
+impl SeaOrmNotificationRepository {
+    pub fn new(db: DatabaseConnection) -> Self {
+        Self { db }
+    }
+}
+
+#[async_trait]
+impl NotificationRepository for SeaOrmNotificationRepository {
+    async fn push(
+        &self,
+        recipient: UserId,
+        kind: NotificationKind,
+        actor: UserId,
+    ) -> Result<(), RepoError> {
+        notification::ActiveModel {
+            user_id: Set(recipient.0),
+            kind: Set(kind.as_str().to_owned()),
+            actor_id: Set(actor.0),
+            is_read: Set(false),
+            created_at: Set(Utc::now()),
+            ..Default::default()
+        }
+        .insert(&self.db)
+        .await
+        .map_err(db_err)?;
+        Ok(())
+    }
+
+    async fn list(&self, user: UserId, limit: u64) -> Result<Vec<NotificationRow>, RepoError> {
+        let rows = notification::Entity::find()
+            .filter(notification::Column::UserId.eq(user.0))
+            .order_by_desc(notification::Column::CreatedAt)
+            .limit(limit)
+            .all(&self.db)
+            .await
+            .map_err(db_err)?;
+        let actor_ids: Vec<i64> = rows.iter().map(|n| n.actor_id).collect();
+        let names = usernames_by_ids(&self.db, actor_ids).await?;
+        Ok(rows
+            .into_iter()
+            .map(|n| NotificationRow {
+                id: n.id,
+                kind: n.kind,
+                actor_username: names.get(&n.actor_id).cloned().unwrap_or_default(),
+                is_read: n.is_read,
+                created_at: n.created_at.to_rfc3339(),
+            })
+            .collect())
+    }
+
+    async fn mark_all_read(&self, user: UserId) -> Result<u64, RepoError> {
+        let res = notification::Entity::update_many()
+            .col_expr(notification::Column::IsRead, Expr::value(true))
+            .filter(notification::Column::UserId.eq(user.0))
+            .filter(notification::Column::IsRead.eq(false))
+            .exec(&self.db)
+            .await
+            .map_err(db_err)?;
+        Ok(res.rows_affected)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1050,5 +1253,40 @@ mod tests {
         assert!(tf.has_followed(UserId(1), TeamId(team.id)).await.unwrap());
         assert!(tf.unfollow(UserId(1), TeamId(team.id)).await.unwrap());
         assert!(!tf.has_followed(UserId(1), TeamId(team.id)).await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn messaging_thread_conversations_and_notifications() {
+        let db = connect_and_migrate("sqlite::memory:").await.unwrap();
+        seed_reference_and_athletes(&db, &PasswordService::new()).await.unwrap(); // messi=1, ronaldo=2
+
+        let msgs = SeaOrmMessageRepository::new(db.clone());
+        let b1 = MessageBody::new("Salut Cristiano").unwrap();
+        let m = msgs.send(UserId(1), UserId(2), &b1).await.unwrap();
+        assert_eq!(m.sender_username, "messi");
+        assert_eq!(m.recipient_username, "ronaldo");
+        let b2 = MessageBody::new("Salut Leo").unwrap();
+        msgs.send(UserId(2), UserId(1), &b2).await.unwrap();
+
+        // Thread bidirectionnel, chronologique.
+        let thread = msgs.thread(UserId(1), UserId(2), 50).await.unwrap();
+        assert_eq!(thread.len(), 2);
+        assert_eq!(thread[0].body, "Salut Cristiano");
+
+        // Conversations de messi : un aperçu (interlocuteur = ronaldo).
+        let convs = msgs.conversations(UserId(1)).await.unwrap();
+        assert_eq!(convs.len(), 1);
+        assert_eq!(convs[0].other_username, "ronaldo");
+
+        // Notifications : push + list (actor résolu) + mark_all_read.
+        let notifs = SeaOrmNotificationRepository::new(db.clone());
+        notifs.push(UserId(2), NotificationKind::Message, UserId(1)).await.unwrap();
+        let list = notifs.list(UserId(2), 50).await.unwrap();
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].kind, "message");
+        assert_eq!(list[0].actor_username, "messi");
+        assert!(!list[0].is_read);
+        assert_eq!(notifs.mark_all_read(UserId(2)).await.unwrap(), 1);
+        assert!(notifs.list(UserId(2), 50).await.unwrap()[0].is_read);
     }
 }
