@@ -5,7 +5,7 @@
 
 use async_trait::async_trait;
 use grind_domain::entities::{Follow, Post, PostId, UserId};
-use grind_domain::value_objects::PostContent;
+use grind_domain::value_objects::{PostContent, Username};
 use grind_domain::DomainError;
 
 /// Erreur d'un port d'infrastructure (BDD indisponible, contrainte, etc.).
@@ -85,6 +85,14 @@ pub struct AuthUserRecord {
 pub trait UserRepository: Send + Sync {
     async fn by_username(&self, username: &str) -> Result<Option<AuthUserRecord>, RepoError>;
     async fn update_password(&self, user_id: i64, new_hash: &str) -> Result<(), RepoError>;
+    /// Crée un utilisateur (non-staff). L'unicité du `username` est garantie par
+    /// le backend (contrainte) → `RepoError::Conflict` si déjà pris.
+    async fn create(
+        &self,
+        username: &str,
+        password_hash: &str,
+        display_name: &str,
+    ) -> Result<AuthUserRecord, RepoError>;
 }
 
 /// Résultat de vérification d'un mot de passe (port infra, cf. auth hybride).
@@ -276,6 +284,61 @@ impl<'a, U: UserRepository + ?Sized, H: PasswordHasher + ?Sized> Login<'a, U, H>
     }
 }
 
+/// Crée un compte. Invariant **domaine** : le username est validé par `Username`.
+/// Politique **application** : longueur minimale du mot de passe. Unicité :
+/// déléguée au repo (contrainte backend) → `Conflict` propre si déjà pris.
+pub struct Register<'a, U: UserRepository + ?Sized, H: PasswordHasher + ?Sized> {
+    users: &'a U,
+    hasher: &'a H,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RegisterOutcome {
+    pub user_id: i64,
+    pub username: String,
+    pub is_staff: bool,
+}
+
+impl<'a, U: UserRepository + ?Sized, H: PasswordHasher + ?Sized> Register<'a, U, H> {
+    /// Longueur minimale d'un mot de passe (politique applicative, pas domaine).
+    pub const MIN_PASSWORD_LEN: usize = 8;
+
+    pub fn new(users: &'a U, hasher: &'a H) -> Self {
+        Self { users, hasher }
+    }
+
+    pub async fn execute(
+        &self,
+        username: &str,
+        password: &str,
+        display_name: &str,
+    ) -> Result<RegisterOutcome, AppError> {
+        // 1. Invariant domaine : format du username ([a-z0-9_], 1..=30).
+        let username = Username::new(username)?;
+        // 2. Politique applicative : mot de passe assez long.
+        if password.chars().count() < Self::MIN_PASSWORD_LEN {
+            return Err(AppError::Auth(format!(
+                "mot de passe trop court (min {})",
+                Self::MIN_PASSWORD_LEN
+            )));
+        }
+        // 3. Hachage argon2 (jamais le mot de passe en clair au repo).
+        let hash = self.hasher.hash(password)?;
+        // 4. Nom affiché : le username par défaut si vide.
+        let display = {
+            let d = display_name.trim();
+            if d.is_empty() { username.as_str() } else { d }
+        };
+        // 5. Création (unicité = contrainte backend → Conflict si déjà pris).
+        let rec = self.users.create(username.as_str(), &hash, display).await?;
+        Ok(RegisterOutcome {
+            user_id: rec.id,
+            username: rec.username,
+            is_staff: rec.is_staff,
+        })
+    }
+}
+
 /// Supprime un post (modération). L'autorisation (staff) est vérifiée en amont
 /// par l'extractor `AdminUser` de la couche présentation.
 pub struct DeletePost<'a, R: PostRepository + ?Sized> {
@@ -450,22 +513,51 @@ mod tests {
         assert_eq!(s, LikeState { liked: false, likes_count: 0 });
     }
 
+    #[derive(Default)]
     struct InMemoryUsers {
         record: Option<AuthUserRecord>,
+        created: Mutex<Vec<AuthUserRecord>>,
         updated_to: Mutex<Option<String>>,
     }
 
     #[async_trait]
     impl UserRepository for InMemoryUsers {
         async fn by_username(&self, username: &str) -> Result<Option<AuthUserRecord>, RepoError> {
+            if let Some(r) = self.record.clone().filter(|r| r.username == username) {
+                return Ok(Some(r));
+            }
             Ok(self
-                .record
-                .clone()
-                .filter(|r| r.username == username))
+                .created
+                .lock()
+                .unwrap()
+                .iter()
+                .find(|r| r.username == username)
+                .cloned())
         }
         async fn update_password(&self, _user_id: i64, new_hash: &str) -> Result<(), RepoError> {
             *self.updated_to.lock().unwrap() = Some(new_hash.to_owned());
             Ok(())
+        }
+        async fn create(
+            &self,
+            username: &str,
+            password_hash: &str,
+            display_name: &str,
+        ) -> Result<AuthUserRecord, RepoError> {
+            let taken = self.record.as_ref().is_some_and(|r| r.username == username);
+            let mut created = self.created.lock().unwrap();
+            if taken || created.iter().any(|r| r.username == username) {
+                return Err(RepoError::Conflict(format!("username '{username}' déjà pris")));
+            }
+            let rec = AuthUserRecord {
+                id: 100 + created.len() as i64,
+                username: username.to_owned(),
+                password_hash: password_hash.to_owned(),
+                is_staff: false,
+            };
+            let _ = display_name; // le mock ne stocke pas le display name
+            created.push(rec.clone());
+            Ok(rec)
         }
     }
 
@@ -492,13 +584,13 @@ mod tests {
                 password_hash: hash.into(),
                 is_staff: true,
             }),
-            updated_to: Mutex::new(None),
+            ..Default::default()
         }
     }
 
     #[tokio::test]
     async fn login_unknown_user_returns_none() {
-        let users = InMemoryUsers { record: None, updated_to: Mutex::new(None) };
+        let users = InMemoryUsers::default();
         let hasher = FakeHasher;
         let out = Login::new(&users, &hasher).execute("ghost", "x").await.unwrap();
         assert_eq!(out, None);
@@ -536,5 +628,57 @@ mod tests {
             Some("$argon2id$rehashed"),
             "le hash legacy doit être ré-écrit en argon2"
         );
+    }
+
+    #[tokio::test]
+    async fn register_creates_non_staff_user_with_hashed_password() {
+        let users = InMemoryUsers::default();
+        let hasher = FakeHasher;
+        let out = Register::new(&users, &hasher)
+            .execute("newpro", "grind1234", "New Pro")
+            .await
+            .unwrap();
+        assert_eq!(out.username, "newpro");
+        assert!(!out.is_staff, "un compte auto-créé n'est jamais staff");
+
+        // Le mot de passe stocké est le hash, pas le clair.
+        let stored = users.by_username("newpro").await.unwrap().unwrap();
+        assert_eq!(stored.password_hash, "$argon2id$rehashed");
+    }
+
+    #[tokio::test]
+    async fn register_rejects_duplicate_username() {
+        let users = user("VALID"); // "messi" existe déjà
+        let hasher = FakeHasher;
+        let err = Register::new(&users, &hasher)
+            .execute("messi", "grind1234", "")
+            .await
+            .unwrap_err();
+        assert!(matches!(err, AppError::Repo(RepoError::Conflict(_))));
+    }
+
+    #[tokio::test]
+    async fn register_rejects_invalid_username() {
+        let users = InMemoryUsers::default();
+        let hasher = FakeHasher;
+        // Majuscule interdite → invariant domaine.
+        let err = Register::new(&users, &hasher)
+            .execute("Messi", "grind1234", "")
+            .await
+            .unwrap_err();
+        assert_eq!(err, AppError::Domain(DomainError::InvalidUsername));
+    }
+
+    #[tokio::test]
+    async fn register_rejects_short_password() {
+        let users = InMemoryUsers::default();
+        let hasher = FakeHasher;
+        let err = Register::new(&users, &hasher)
+            .execute("newpro", "short", "")
+            .await
+            .unwrap_err();
+        assert!(matches!(err, AppError::Auth(_)));
+        // Rien n'a été créé.
+        assert!(users.by_username("newpro").await.unwrap().is_none());
     }
 }

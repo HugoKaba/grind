@@ -147,6 +147,51 @@ mod tests {
             .unwrap();
         assert_ne!(resp.status(), StatusCode::OK);
 
+        // register nouveau compte → 200 + cookie de session (auto-login)
+        let resp = app
+            .clone()
+            .oneshot(form(
+                "/api/register",
+                None,
+                "username=newpro&display_name=New+Pro&password=grind1234",
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        assert!(session_of(&resp).starts_with("session="));
+
+        // register username déjà pris (messi seedé) → refusé (Conflict)
+        let resp = app
+            .clone()
+            .oneshot(form(
+                "/api/register",
+                None,
+                "username=messi&display_name=&password=grind1234",
+            ))
+            .await
+            .unwrap();
+        assert_ne!(resp.status(), StatusCode::OK);
+
+        // register mot de passe trop court → refusé (politique applicative)
+        let resp = app
+            .clone()
+            .oneshot(form(
+                "/api/register",
+                None,
+                "username=tooshort&display_name=&password=abc",
+            ))
+            .await
+            .unwrap();
+        assert_ne!(resp.status(), StatusCode::OK);
+
+        // le compte créé peut se connecter (hash argon2 vérifiable)
+        let resp = app
+            .clone()
+            .oneshot(form("/api/login", None, "username=newpro&password=grind1234"))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
         // create_post sans cookie → pas 200
         let resp = app
             .clone()

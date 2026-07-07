@@ -68,6 +68,7 @@ fn Home() -> impl IntoView {
 
     // Server actions (formulaires → server functions).
     let login = ServerAction::<Login>::new();
+    let register = ServerAction::<Register>::new();
     let create = ServerAction::<CreatePost>::new();
     let like = ServerAction::<ToggleLike>::new();
 
@@ -91,6 +92,21 @@ fn Home() -> impl IntoView {
         <p>
             {move || match login.value().get() {
                 Some(Ok(u)) => format!("Connecté : @{} (staff : {})", u.username, u.is_staff),
+                Some(Err(e)) => format!("Échec : {e}"),
+                None => String::new(),
+            }}
+        </p>
+
+        <h2>"Inscription"</h2>
+        <ActionForm action=register>
+            <input type="text" name="username" placeholder="username ([a-z0-9_])" />
+            <input type="text" name="display_name" placeholder="nom affiché (optionnel)" />
+            <input type="password" name="password" placeholder="mot de passe (min 8)" />
+            <button type="submit">"Créer le compte"</button>
+        </ActionForm>
+        <p>
+            {move || match register.value().get() {
+                Some(Ok(u)) => format!("Compte créé et connecté : @{}", u.username),
                 Some(Err(e)) => format!("Échec : {e}"),
                 None => String::new(),
             }}
@@ -368,6 +384,25 @@ async fn optional_viewer(state: &state::DomainState) -> Option<grind_domain::ent
     Some(grind_domain::entities::UserId(claims.sub))
 }
 
+/// Émet un JWT et le pose en cookie de session `Set-Cookie` sur la réponse.
+/// Partagé par `login` et `register` (auto-login après inscription).
+#[cfg(feature = "ssr")]
+fn set_session_cookie(
+    secret: &str,
+    user_id: i64,
+    username: &str,
+    is_staff: bool,
+) -> Result<(), ServerFnError> {
+    let token = auth::issue_token(secret, user_id, username, is_staff);
+    let response = expect_context::<leptos_axum::ResponseOptions>();
+    response.insert_header(
+        axum::http::header::SET_COOKIE,
+        axum::http::HeaderValue::from_str(&auth::session_cookie(&token))
+            .map_err(|e| ServerFnError::new(e.to_string()))?,
+    );
+    Ok(())
+}
+
 /// Server function : suppression d'un post (staff uniquement, auth par cookie).
 #[server(endpoint = "delete_post")]
 pub async fn delete_post(id: i64) -> Result<(), ServerFnError> {
@@ -386,8 +421,7 @@ pub async fn delete_post(id: i64) -> Result<(), ServerFnError> {
 /// Server function : connexion (auth hybride via use case) → pose un cookie de session.
 #[server(endpoint = "login")]
 pub async fn login(username: String, password: String) -> Result<LoginDto, ServerFnError> {
-    let state = use_context::<state::DomainState>()
-        .ok_or_else(|| ServerFnError::new("DomainState absent"))?;
+    let state = domain_state()?;
 
     let uc = grind_application::Login::new(&*state.users, &*state.hasher);
     let out = uc
@@ -396,14 +430,27 @@ pub async fn login(username: String, password: String) -> Result<LoginDto, Serve
         .map_err(|e| ServerFnError::new(e.to_string()))?
         .ok_or_else(|| ServerFnError::new("Identifiants invalides"))?;
 
-    let token = auth::issue_token(&state.jwt_secret, out.user_id, &out.username, out.is_staff);
-    let response = expect_context::<leptos_axum::ResponseOptions>();
-    response.insert_header(
-        axum::http::header::SET_COOKIE,
-        axum::http::HeaderValue::from_str(&auth::session_cookie(&token))
-            .map_err(|e| ServerFnError::new(e.to_string()))?,
-    );
+    set_session_cookie(&state.jwt_secret, out.user_id, &out.username, out.is_staff)?;
+    Ok(LoginDto { username: out.username, is_staff: out.is_staff })
+}
 
+/// Server function : inscription (use case `Register`) → auto-login (cookie posé).
+#[server(endpoint = "register")]
+pub async fn register(
+    username: String,
+    password: String,
+    display_name: String,
+) -> Result<LoginDto, ServerFnError> {
+    let state = domain_state()?;
+
+    let uc = grind_application::Register::new(&*state.users, &*state.hasher);
+    let out = uc
+        .execute(&username, &password, &display_name)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?;
+
+    // Auto-login : on pose la session directement après création du compte.
+    set_session_cookie(&state.jwt_secret, out.user_id, &out.username, out.is_staff)?;
     Ok(LoginDto { username: out.username, is_staff: out.is_staff })
 }
 

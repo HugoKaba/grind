@@ -289,6 +289,42 @@ impl UserRepository for SeaOrmUserRepository {
             .map_err(db_err)?;
         Ok(())
     }
+
+    async fn create(
+        &self,
+        username: &str,
+        password_hash: &str,
+        display_name: &str,
+    ) -> Result<AuthUserRecord, RepoError> {
+        let res = users::ActiveModel {
+            username: Set(username.to_owned()),
+            password: Set(password_hash.to_owned()),
+            display_name: Set(display_name.to_owned()),
+            is_staff: Set(false),
+            ..Default::default()
+        }
+        .insert(&self.db)
+        .await;
+
+        match res {
+            Ok(u) => Ok(AuthUserRecord {
+                id: u.id,
+                username: u.username,
+                password_hash: u.password,
+                is_staff: u.is_staff,
+            }),
+            Err(e) => {
+                // Violation de la contrainte d'unicité (username déjà pris) →
+                // Conflict. Détection portable SQLite/Postgres par le message.
+                let msg = e.to_string().to_lowercase();
+                if msg.contains("unique") || msg.contains("duplicate") {
+                    Err(RepoError::Conflict(format!("username '{username}' déjà pris")))
+                } else {
+                    Err(db_err(e))
+                }
+            }
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -494,5 +530,23 @@ mod tests {
         // Vu par un anonyme → liked_by_me = false.
         let seen = feed.recent(None, 10).await.unwrap();
         assert!(!seen.iter().find(|i| i.id == p.id.0).unwrap().liked_by_me);
+    }
+
+    #[tokio::test]
+    async fn create_user_enforces_unique_username() {
+        let db = connect_and_migrate("sqlite::memory:").await.unwrap();
+        let users = SeaOrmUserRepository::new(db);
+
+        let rec = users.create("newpro", "$argon2id$hash", "New Pro").await.unwrap();
+        assert!(!rec.is_staff);
+        assert_eq!(rec.username, "newpro");
+
+        // by_username retrouve le compte fraîchement créé.
+        let found = users.by_username("newpro").await.unwrap().unwrap();
+        assert_eq!(found.id, rec.id);
+
+        // Doublon → Conflict (contrainte d'unicité).
+        let err = users.create("newpro", "$argon2id$other", "Dup").await.unwrap_err();
+        assert!(matches!(err, RepoError::Conflict(_)), "attendu Conflict, reçu: {err:?}");
     }
 }
