@@ -218,6 +218,28 @@ mod tests {
         assert_eq!(resp.status(), StatusCode::OK);
         assert!(body_string(resp).await.contains("Via server fn"));
 
+        // reply sans cookie → refusé
+        let resp = app
+            .clone()
+            .oneshot(form("/api/reply", None, "parent_id=1&content=hack"))
+            .await
+            .unwrap();
+        assert_ne!(resp.status(), StatusCode::OK);
+
+        // reply (messi) au post seedé id=1 → 200, puis visible dans le thread
+        let resp = app
+            .clone()
+            .oneshot(form("/api/reply", Some(&messi), "parent_id=1&content=Belle analyse"))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let resp = app
+            .clone()
+            .oneshot(form("/api/get_post_detail", None, "id=1"))
+            .await
+            .unwrap();
+        assert!(body_string(resp).await.contains("Belle analyse"), "le thread doit contenir la réponse");
+
         // toggle_like sans cookie → refusé
         let resp = app
             .clone()

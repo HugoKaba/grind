@@ -184,9 +184,12 @@ fn Home() -> impl IntoView {
 #[component]
 fn PostDetail() -> impl IntoView {
     let params = use_params_map();
+    let post_id = move || params.read().get("id").and_then(|s| s.parse::<i64>().ok());
+    let reply = ServerAction::<Reply>::new();
+    // Le thread se recharge après chaque réponse publiée (source = id + version).
     let post = Resource::new(
-        move || params.read().get("id").and_then(|s| s.parse::<i64>().ok()),
-        |maybe_id| async move {
+        move || (post_id(), reply.version().get()),
+        |(maybe_id, _)| async move {
             match maybe_id {
                 Some(id) => get_post_detail(id).await,
                 None => Ok((None, Vec::new())),
@@ -201,12 +204,26 @@ fn PostDetail() -> impl IntoView {
                 post.get()
                     .map(|res| match res {
                         Ok((Some(p), replies)) => {
+                            let parent_id = p.id;
                             view! {
                                 <article class="post-detail">
                                     <h2>"@"{p.author_display.clone()}</h2>
                                     <p>{p.content.clone()}</p>
                                     <small>{p.likes_count}" ❤ · "{p.replies_count}" 💬"</small>
                                 </article>
+                                <h3>"Répondre"</h3>
+                                <ActionForm action=reply>
+                                    <input type="hidden" name="parent_id" value=parent_id />
+                                    <input type="text" name="content" placeholder="Votre réponse…" />
+                                    <button type="submit">"Répondre"</button>
+                                </ActionForm>
+                                <p>
+                                    {move || match reply.value().get() {
+                                        Some(Ok(_)) => "Réponse publiée.".to_string(),
+                                        Some(Err(e)) => format!("Échec : {e}"),
+                                        None => String::new(),
+                                    }}
+                                </p>
                                 <h3>"Réponses"</h3>
                                 <ul class="thread">
                                     {replies
@@ -611,6 +628,37 @@ pub async fn toggle_like(id: i64) -> Result<LikeStateDto, ServerFnError> {
         .map_err(|e| ServerFnError::new(e.to_string()))?;
 
     Ok(LikeStateDto { post_id: id, liked: s.liked, likes_count: s.likes_count })
+}
+
+/// Server function : répond à un post (crée un post enfant, `parent_id` renseigné).
+/// Le compteur `replies_count` du parent est incrémenté atomiquement par le repo.
+#[server(endpoint = "reply")]
+pub async fn reply(parent_id: i64, content: String) -> Result<FeedItemDto, ServerFnError> {
+    let state = domain_state()?;
+    let claims = require_claims(&state).await?;
+
+    let post = grind_application::CreatePost::new(&*state.posts)
+        .execute(
+            grind_domain::entities::UserId(claims.sub),
+            &content,
+            Some(grind_domain::entities::PostId(parent_id)),
+        )
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?;
+
+    Ok(FeedItemDto {
+        id: post.id.0,
+        author_username: claims.username.clone(),
+        author_display: claims.username,
+        content: post.content.as_str().to_owned(),
+        likes_count: 0,
+        reposts_count: 0,
+        replies_count: 0,
+        created_at: String::new(),
+        liked_by_me: false,
+        reposted_by_me: false,
+        bookmarked_by_me: false,
+    })
 }
 
 /// Server function : bascule le repost d'un post (controller pur ; orchestration
