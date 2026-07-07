@@ -1,0 +1,46 @@
+[package]
+name = "grind-web"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+leptos = { version = "0.7" }
+leptos_router = { version = "0.7" }
+leptos_meta = { version = "0.7" }
+leptos_axum = { version = "0.7", optional = true }
+
+axum = { version = "0.7", optional = true }
+tokio = { version = "1", features = ["rt-multi-thread", "macros"], optional = true }
+tower-http = { version = "0.6", features = ["fs"], optional = true }
+
+wasm-bindgen = { version = "0.2", optional = true }
+console_error_panic_hook = { version = "0.1", optional = true }
+
+[features]
+default = ["ssr"]
+hydrate = ["leptos/hydrate", "dep:wasm-bindgen", "dep:console_error_panic_hook"]
+ssr = [
+    "dep:axum",
+    "dep:tokio",
+    "dep:tower-http",
+    "dep:leptos_axum",
+    "leptos/ssr",
+    "leptos_meta/ssr",
+    "leptos_router/ssr",
+]
+
+[package.metadata.leptos]
+output-name = "grind"
+site-root = "target/site"
+site-pkg-dir = "pkg"
+site-addr = "127.0.0.1:3000"
+reload-port = 3001
+browserquery = "defaults"
+bin-features = ["ssr"]
+bin-default-features = false
+lib-features = ["hydrate"]
+lib-default-features = false

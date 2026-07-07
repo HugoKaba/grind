@@ -11,7 +11,8 @@ pour le plan complet. L'ancien projet Django vit dans `legacy-django/` (retiré 
 | `crates/application` | Use cases + ports (traits) | domain |
 | `crates/infrastructure` | Adapters (auth PBKDF2→argon2, plus tard SeaORM/Redis) | domain, application |
 | `crates/shared` | DTOs serde partagés client/serveur | — |
-| `app/` *(Phase 4)* | Leptos + Axum (binaire) | tout |
+| `app/` | Présentation : Axum + Leptos SSR + auth JWT/cookie + admin (REST + pages SSR, testé) | tout |
+| `web/` | App Leptos **hydratée** full-stack (SSR + WASM + server functions), via `cargo-leptos` | leptos |
 
 ## Build / test
 
@@ -19,7 +20,19 @@ Le repo est sur iCloud → rediriger `target/` hors iCloud pour éviter les temp
 
 ```sh
 export CARGO_TARGET_DIR=/tmp/grind-rs-target
-cargo test            # tous les crates
-cargo test -p grind-domain
-cargo test -p grind-infrastructure   # spike auth (vérif hash Django réel)
+cargo test --workspace                 # tous les crates (24 tests)
+cargo test -p grind-infrastructure     # spike auth (vérif hash Django réel)
+cargo test -p grind-app                # intégration présentation→application→infra
 ```
+
+### Frontend hydraté (`web/`)
+
+```sh
+cd web
+cargo leptos build      # compile le serveur SSR + le client WASM (hydratation)
+cargo leptos serve      # sert l'app hydratée sur http://127.0.0.1:3000
+```
+
+`web/` démontre le pipeline **server functions + hydratation** (îlot compteur réactif +
+server function `ping`). Prochaine étape : câbler les server functions sur les use cases
+(`grind-application`) via le context Leptos, et migrer les pages de `app/` vers `web/`.

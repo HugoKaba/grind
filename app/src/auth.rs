@@ -34,7 +34,7 @@ pub fn session_cookie(token: &str) -> String {
     format!("session={token}; HttpOnly; Path=/; SameSite=Lax; Max-Age=86400")
 }
 
-fn token_from_parts<'a>(parts: &'a Parts) -> Option<&'a str> {
+fn token_from_parts(parts: &Parts) -> Option<&str> {
     // 1) Authorization: Bearer <jwt>
     if let Some(bearer) = parts
         .headers
