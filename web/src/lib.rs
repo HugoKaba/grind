@@ -12,9 +12,13 @@ use leptos_router::hooks::use_params_map;
 use leptos_router::path;
 
 use grind_shared::{
-    BookmarkStateDto, FeedItemDto, FollowStateDto, LikeStateDto, LoginDto, ProfileDto,
-    RepostStateDto,
+    BookmarkStateDto, CatalogDto, FeedItemDto, FollowStateDto, LikeStateDto, LoginDto, MatchPageDto,
+    ProfileDto, RepostStateDto, TeamFollowStateDto, TeamPageDto,
 };
+// DTOs uniquement nommés dans les mappers SSR (server fns) → gated pour éviter
+// un warning d'import inutilisé côté client WASM.
+#[cfg(feature = "ssr")]
+use grind_shared::{MatchDto, SportDto, TeamDto};
 
 #[cfg(feature = "ssr")]
 pub mod auth;
@@ -50,13 +54,17 @@ pub fn App() -> impl IntoView {
         <Title text="GRIND" />
         <Router>
             <nav>
-                <A href="/">"Accueil"</A>" · "<A href="/admin">"Admin"</A>
+                <A href="/">"Accueil"</A>" · "<A href="/sports">"Sports"</A>" · "
+                <A href="/admin">"Admin"</A>
             </nav>
             <main>
                 <Routes fallback=|| "Page introuvable.".into_view()>
                     <Route path=path!("/") view=Home />
                     <Route path=path!("/post/:id") view=PostDetail />
                     <Route path=path!("/u/:username") view=Profile />
+                    <Route path=path!("/sports") view=Sports />
+                    <Route path=path!("/team/:slug") view=Team />
+                    <Route path=path!("/match/:id") view=MatchPage />
                     <Route path=path!("/admin") view=Admin />
                 </Routes>
             </main>
@@ -333,6 +341,145 @@ fn Admin() -> impl IntoView {
                             }
                                 .into_any()
                         }
+                        Err(e) => view! { <p>"Erreur : " {e.to_string()}</p> }.into_any(),
+                    })
+            }}
+        </Suspense>
+    }
+}
+
+#[component]
+fn Sports() -> impl IntoView {
+    let catalog = Resource::new(|| (), |_| get_catalog());
+    view! {
+        <h1>"🏟️ Sports"</h1>
+        <Suspense fallback=|| view! { <p>"Chargement…"</p> }>
+            {move || {
+                catalog
+                    .get()
+                    .map(|res| match res {
+                        Ok(c) => {
+                            view! {
+                                <h2>"Équipes"</h2>
+                                <ul>
+                                    {c.teams
+                                        .into_iter()
+                                        .map(|t| {
+                                            let href = format!("/team/{}", t.slug);
+                                            view! { <li><A href=href>{t.name}</A>" ("{t.country}")"</li> }
+                                        })
+                                        .collect_view()}
+                                </ul>
+                                <h2>"Matchs"</h2>
+                                <ul>
+                                    {c.matches
+                                        .into_iter()
+                                        .map(|m| {
+                                            let href = format!("/match/{}", m.id);
+                                            view! {
+                                                <li>
+                                                    <A href=href>{m.home_team}" vs "{m.away_team}</A>
+                                                    " — "{m.status}
+                                                </li>
+                                            }
+                                        })
+                                        .collect_view()}
+                                </ul>
+                            }
+                                .into_any()
+                        }
+                        Err(e) => view! { <p>"Erreur : " {e.to_string()}</p> }.into_any(),
+                    })
+            }}
+        </Suspense>
+    }
+}
+
+#[component]
+fn Team() -> impl IntoView {
+    let params = use_params_map();
+    let slug = move || params.read().get("slug").unwrap_or_default();
+    let follow = ServerAction::<ToggleTeamFollow>::new();
+    let team = Resource::new(
+        move || (slug(), follow.version().get()),
+        |(s, _)| async move { get_team(s).await },
+    );
+    view! {
+        <Suspense fallback=|| view! { <p>"Chargement…"</p> }>
+            {move || {
+                team.get()
+                    .map(|res| match res {
+                        Ok(Some(p)) => {
+                            let follow_btn = p.can_follow.then(|| {
+                                let label = if p.is_following { "Ne plus suivre" } else { "Suivre l'équipe" };
+                                let slug = p.team.slug.clone();
+                                view! {
+                                    <ActionForm action=follow>
+                                        <input type="hidden" name="slug" value=slug />
+                                        <button type="submit">{label}</button>
+                                    </ActionForm>
+                                }
+                            });
+                            view! {
+                                <h1>"⚽ "{p.team.name.clone()}</h1>
+                                <p>"Pays : "{p.team.country.clone()}</p>
+                                <div>{follow_btn}</div>
+                            }
+                                .into_any()
+                        }
+                        Ok(None) => view! { <p>"Équipe introuvable."</p> }.into_any(),
+                        Err(e) => view! { <p>"Erreur : " {e.to_string()}</p> }.into_any(),
+                    })
+            }}
+        </Suspense>
+    }
+}
+
+#[component]
+fn MatchPage() -> impl IntoView {
+    let params = use_params_map();
+    let match_id = move || params.read().get("id").and_then(|s| s.parse::<i64>().ok());
+    let post = ServerAction::<PostAboutMatch>::new();
+    let game = Resource::new(
+        move || (match_id(), post.version().get()),
+        |(maybe_id, _)| async move {
+            match maybe_id {
+                Some(id) => get_match(id).await,
+                None => Ok(None),
+            }
+        },
+    );
+    view! {
+        <Suspense fallback=|| view! { <p>"Chargement…"</p> }>
+            {move || {
+                game.get()
+                    .map(|res| match res {
+                        Ok(Some(p)) => {
+                            let id = p.game.id;
+                            let score = match (p.game.home_score, p.game.away_score) {
+                                (Some(h), Some(a)) => format!("{h} - {a}"),
+                                _ => "—".to_string(),
+                            };
+                            view! {
+                                <h1>{p.game.home_team.clone()}" vs "{p.game.away_team.clone()}</h1>
+                                <p>"Score : "{score}" · "{p.game.status.clone()}</p>
+                                <h3>"Poster sur ce match"</h3>
+                                <ActionForm action=post>
+                                    <input type="hidden" name="match_id" value=id />
+                                    <input type="text" name="content" placeholder="Votre réaction live…" />
+                                    <button type="submit">"Publier"</button>
+                                </ActionForm>
+                                <h3>"Fil du match"</h3>
+                                <ul class="feed">
+                                    {p.posts
+                                        .into_iter()
+                                        .map(|i| view! { <li><strong>"@"{i.author_username}</strong>" "{i.content}</li> })
+                                        .collect_view()}
+                                </ul>
+                            }
+                                .into_any()
+                        }
+                        Ok(None) => view! { <p>"Match introuvable."</p> }.into_any(),
                         Err(e) => view! { <p>"Erreur : " {e.to_string()}</p> }.into_any(),
                     })
             }}
@@ -690,6 +837,127 @@ pub async fn toggle_bookmark(id: i64) -> Result<BookmarkStateDto, ServerFnError>
         .await
         .map_err(|e| ServerFnError::new(e.to_string()))?;
     Ok(BookmarkStateDto { post_id: id, bookmarked: s.bookmarked })
+}
+
+// --- Domaine sport ---
+
+#[cfg(feature = "ssr")]
+fn team_to_dto(t: grind_application::TeamRow) -> TeamDto {
+    TeamDto { id: t.id, sport_id: t.sport_id, name: t.name, slug: t.slug, country: t.country }
+}
+
+#[cfg(feature = "ssr")]
+fn match_to_dto(m: grind_application::MatchRow) -> MatchDto {
+    MatchDto {
+        id: m.id,
+        sport_id: m.sport_id,
+        home_team: m.home_team,
+        away_team: m.away_team,
+        kickoff: m.kickoff,
+        status: m.status,
+        home_score: m.home_score,
+        away_score: m.away_score,
+    }
+}
+
+/// Server function : catalogue reference data (sports + équipes + matchs).
+#[server(endpoint = "get_catalog")]
+pub async fn get_catalog() -> Result<CatalogDto, ServerFnError> {
+    let state = domain_state()?;
+    let err = |e: grind_application::RepoError| ServerFnError::new(e.to_string());
+    let sports = state
+        .catalog
+        .list_sports()
+        .await
+        .map_err(err)?
+        .into_iter()
+        .map(|s| SportDto { id: s.id, name: s.name, slug: s.slug })
+        .collect();
+    let teams = state.catalog.list_teams().await.map_err(err)?.into_iter().map(team_to_dto).collect();
+    let matches = state.matches.list().await.map_err(err)?.into_iter().map(match_to_dto).collect();
+    Ok(CatalogDto { sports, teams, matches })
+}
+
+/// Server function : page équipe (infos + état de suivi viewer-aware).
+#[server(endpoint = "get_team")]
+pub async fn get_team(slug: String) -> Result<Option<TeamPageDto>, ServerFnError> {
+    let state = domain_state()?;
+    let viewer = optional_viewer(&state).await;
+    let Some(team) = state
+        .catalog
+        .team_by_slug(&slug)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?
+    else {
+        return Ok(None);
+    };
+
+    let (is_following, can_follow) = match viewer {
+        Some(v) => {
+            let following = state
+                .team_follows
+                .has_followed(v, grind_domain::entities::TeamId(team.id))
+                .await
+                .map_err(|e| ServerFnError::new(e.to_string()))?;
+            (following, true)
+        }
+        None => (false, false),
+    };
+    Ok(Some(TeamPageDto { team: team_to_dto(team), is_following, can_follow }))
+}
+
+/// Server function : bascule le suivi d'une équipe (par slug) pour l'utilisateur connecté.
+#[server(endpoint = "toggle_team_follow")]
+pub async fn toggle_team_follow(slug: String) -> Result<TeamFollowStateDto, ServerFnError> {
+    let state = domain_state()?;
+    let claims = require_claims(&state).await?;
+    let team = state
+        .catalog
+        .team_by_slug(&slug)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?
+        .ok_or_else(|| ServerFnError::new("Équipe introuvable"))?;
+
+    let s = grind_application::FollowTeam::new(&*state.team_follows)
+        .toggle(
+            grind_domain::entities::UserId(claims.sub),
+            grind_domain::entities::TeamId(team.id),
+        )
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?;
+    Ok(TeamFollowStateDto { team_slug: slug, following: s.following })
+}
+
+/// Server function : page match (infos + fil des posts liés au match, live).
+#[server(endpoint = "get_match")]
+pub async fn get_match(id: i64) -> Result<Option<MatchPageDto>, ServerFnError> {
+    let state = domain_state()?;
+    let viewer = optional_viewer(&state).await;
+    let Some(m) = state.matches.by_id(id).await.map_err(|e| ServerFnError::new(e.to_string()))? else {
+        return Ok(None);
+    };
+    let posts = state
+        .feed
+        .by_match(viewer, id, 100)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?
+        .into_iter()
+        .map(to_dto)
+        .collect();
+    Ok(Some(MatchPageDto { game: match_to_dto(m), posts }))
+}
+
+/// Server function : poste à propos d'un match (live-posting, auth par cookie).
+/// Le sport est dérivé du match par le use case `PostAboutMatch`.
+#[server(endpoint = "post_about_match")]
+pub async fn post_about_match(match_id: i64, content: String) -> Result<(), ServerFnError> {
+    let state = domain_state()?;
+    let claims = require_claims(&state).await?;
+    grind_application::PostAboutMatch::new(&*state.posts, &*state.matches)
+        .execute(grind_domain::entities::UserId(claims.sub), &content, match_id)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?;
+    Ok(())
 }
 
 /// Point d'entrée d'hydratation côté client (WASM).

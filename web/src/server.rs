@@ -423,6 +423,48 @@ mod tests {
             .unwrap();
         assert_ne!(resp.status(), StatusCode::OK);
 
+        // --- Domaine sport ---
+        // Catalogue : contient les équipes seedées.
+        let resp = app
+            .clone()
+            .oneshot(form("/api/get_catalog", None, ""))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        assert!(body_string(resp).await.contains("Inter Miami CF"));
+
+        // Suivi d'équipe : messi suit Inter Miami → following=true.
+        let resp = app
+            .clone()
+            .oneshot(form("/api/toggle_team_follow", Some(&messi), "slug=inter-miami"))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        assert!(body_string(resp).await.contains("\"following\":true"));
+
+        // post_about_match (messi) sur le match seedé (id=1) → visible dans le fil du match.
+        let resp = app
+            .clone()
+            .oneshot(form("/api/post_about_match", Some(&messi), "match_id=1&content=Quel match !"))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let resp = app
+            .clone()
+            .oneshot(form("/api/get_match", None, "id=1"))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        assert!(body_string(resp).await.contains("Quel match !"), "le fil du match doit contenir le post");
+
+        // post_about_match sans cookie → refusé.
+        let resp = app
+            .clone()
+            .oneshot(form("/api/post_about_match", None, "match_id=1&content=hack"))
+            .await
+            .unwrap();
+        assert_ne!(resp.status(), StatusCode::OK);
+
         // delete_post non-staff (ronaldo) → refusé
         let resp = app
             .clone()

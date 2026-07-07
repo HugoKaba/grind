@@ -103,3 +103,63 @@ pub struct ProfileDto {
     pub can_follow: bool,
     pub posts: Vec<FeedItemDto>,
 }
+
+// --- Domaine sport (WASM-safe) ---
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SportDto {
+    pub id: i64,
+    pub name: String,
+    pub slug: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TeamDto {
+    pub id: i64,
+    pub sport_id: i64,
+    pub name: String,
+    pub slug: String,
+    pub country: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MatchDto {
+    pub id: i64,
+    pub sport_id: i64,
+    pub home_team: String,
+    pub away_team: String,
+    pub kickoff: String,
+    pub status: String,
+    pub home_score: Option<i32>,
+    pub away_score: Option<i32>,
+}
+
+/// Catalogue reference data (page /sports).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CatalogDto {
+    pub sports: Vec<SportDto>,
+    pub teams: Vec<TeamDto>,
+    pub matches: Vec<MatchDto>,
+}
+
+/// Page équipe (viewer-aware) : infos + état de suivi de l'équipe.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TeamPageDto {
+    pub team: TeamDto,
+    pub is_following: bool,
+    pub can_follow: bool,
+}
+
+/// État de suivi d'une équipe renvoyé après un toggle.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TeamFollowStateDto {
+    pub team_slug: String,
+    pub following: bool,
+}
+
+/// Page match (live) : infos + fil des posts liés au match.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MatchPageDto {
+    pub game: MatchDto,
+    pub posts: Vec<FeedItemDto>,
+}

@@ -11,7 +11,8 @@ use sea_orm_migration::MigratorTrait;
 pub use migration::Migrator;
 pub use repositories::{
     SeaOrmBookmarkRepository, SeaOrmFeedRepository, SeaOrmFollowRepository, SeaOrmLikeRepository,
-    SeaOrmPostRepository, SeaOrmRepostRepository, SeaOrmUserRepository,
+    SeaOrmMatchRepository, SeaOrmPostRepository, SeaOrmRepostRepository, SeaOrmSportCatalog,
+    SeaOrmTeamFollowRepository, SeaOrmUserRepository,
 };
 pub use sea_orm::DatabaseConnection;
 

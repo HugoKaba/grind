@@ -4,7 +4,7 @@
 //! L'infrastructure (SeaORM, Redis…) implémentera ces ports → inversion de dépendance.
 
 use async_trait::async_trait;
-use grind_domain::entities::{Follow, Post, PostId, UserId};
+use grind_domain::entities::{Follow, MatchId, Post, PostId, SportId, TeamId, UserId};
 use grind_domain::value_objects::{PostContent, Username};
 use grind_domain::DomainError;
 
@@ -45,6 +45,15 @@ pub trait PostRepository: Send + Sync {
 
     /// Supprime un post (modération admin). `true` si une ligne a été supprimée.
     async fn delete(&self, post: PostId) -> Result<bool, RepoError>;
+
+    /// Crée un post lié à un match (live-posting) : renseigne `sport_id`/`match_id`.
+    async fn insert_about_match(
+        &self,
+        author: UserId,
+        content: &PostContent,
+        sport: SportId,
+        match_id: MatchId,
+    ) -> Result<Post, RepoError>;
 }
 
 #[async_trait]
@@ -176,6 +185,68 @@ pub trait FeedRepository: Send + Sync {
         username: &str,
         limit: u64,
     ) -> Result<Vec<FeedItem>, RepoError>;
+    /// Posts liés à un match (live-posting), du plus récent au plus ancien.
+    async fn by_match(
+        &self,
+        viewer: Option<UserId>,
+        match_id: i64,
+        limit: u64,
+    ) -> Result<Vec<FeedItem>, RepoError>;
+}
+
+// ---------------------------------------------------------------------------
+// Domaine sport — read models + ports (reference data + interactions).
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SportRow {
+    pub id: i64,
+    pub name: String,
+    pub slug: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TeamRow {
+    pub id: i64,
+    pub sport_id: i64,
+    pub name: String,
+    pub slug: String,
+    pub country: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MatchRow {
+    pub id: i64,
+    pub sport_id: i64,
+    pub home_team: String,
+    pub away_team: String,
+    pub kickoff: String,
+    pub status: String,
+    pub home_score: Option<i32>,
+    pub away_score: Option<i32>,
+}
+
+/// Reference data sport (lecture) : sports + équipes.
+#[async_trait]
+pub trait SportCatalog: Send + Sync {
+    async fn list_sports(&self) -> Result<Vec<SportRow>, RepoError>;
+    async fn list_teams(&self) -> Result<Vec<TeamRow>, RepoError>;
+    async fn team_by_slug(&self, slug: &str) -> Result<Option<TeamRow>, RepoError>;
+}
+
+/// Rencontres (lecture).
+#[async_trait]
+pub trait MatchRepository: Send + Sync {
+    async fn list(&self) -> Result<Vec<MatchRow>, RepoError>;
+    async fn by_id(&self, id: i64) -> Result<Option<MatchRow>, RepoError>;
+}
+
+/// Suivi d'équipe (analogue à `FollowRepository` mais cible = équipe).
+#[async_trait]
+pub trait TeamFollowRepository: Send + Sync {
+    async fn follow(&self, user: UserId, team: TeamId) -> Result<bool, RepoError>;
+    async fn unfollow(&self, user: UserId, team: TeamId) -> Result<bool, RepoError>;
+    async fn has_followed(&self, user: UserId, team: TeamId) -> Result<bool, RepoError>;
 }
 
 // ---------------------------------------------------------------------------
@@ -349,6 +420,65 @@ impl<'a, R: BookmarkRepository + ?Sized> ToggleBookmark<'a, R> {
     }
 }
 
+/// État de suivi d'une équipe renvoyé au client.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TeamFollowState {
+    pub following: bool,
+}
+
+/// Suivre / ne plus suivre une équipe (toggle).
+pub struct FollowTeam<'a, R: TeamFollowRepository + ?Sized> {
+    repo: &'a R,
+}
+
+impl<'a, R: TeamFollowRepository + ?Sized> FollowTeam<'a, R> {
+    pub fn new(repo: &'a R) -> Self {
+        Self { repo }
+    }
+
+    pub async fn toggle(&self, user: UserId, team: TeamId) -> Result<TeamFollowState, AppError> {
+        if self.repo.has_followed(user, team).await? {
+            self.repo.unfollow(user, team).await?;
+            Ok(TeamFollowState { following: false })
+        } else {
+            self.repo.follow(user, team).await?;
+            Ok(TeamFollowState { following: true })
+        }
+    }
+}
+
+/// Poste à propos d'un match (live-posting). Le `sport_id` est **dérivé du match**
+/// (cohérence garantie : un post lié à un match référence le sport de ce match).
+pub struct PostAboutMatch<'a, P: PostRepository + ?Sized, M: MatchRepository + ?Sized> {
+    posts: &'a P,
+    matches: &'a M,
+}
+
+impl<'a, P: PostRepository + ?Sized, M: MatchRepository + ?Sized> PostAboutMatch<'a, P, M> {
+    pub fn new(posts: &'a P, matches: &'a M) -> Self {
+        Self { posts, matches }
+    }
+
+    pub async fn execute(
+        &self,
+        author: UserId,
+        raw_content: &str,
+        match_id: i64,
+    ) -> Result<Post, AppError> {
+        let content = PostContent::new(raw_content)?; // invariant ≤280, non vide
+        let m = self
+            .matches
+            .by_id(match_id)
+            .await?
+            .ok_or(RepoError::NotFound)?;
+        let post = self
+            .posts
+            .insert_about_match(author, &content, SportId(m.sport_id), MatchId(m.id))
+            .await?;
+        Ok(post)
+    }
+}
+
 /// Authentifie un utilisateur (auth **hybride** : vérif du hash, puis re-hash
 /// argon2 transparent si le hash stocké est un legacy Django PBKDF2).
 pub struct Login<'a, U: UserRepository + ?Sized, H: PasswordHasher + ?Sized> {
@@ -511,6 +641,97 @@ mod tests {
             rows.retain(|p| p.id != post);
             Ok(rows.len() != before)
         }
+        async fn insert_about_match(
+            &self,
+            author: UserId,
+            content: &PostContent,
+            sport: SportId,
+            match_id: MatchId,
+        ) -> Result<Post, RepoError> {
+            let mut rows = self.rows.lock().unwrap();
+            let post = Post {
+                id: PostId(rows.len() as i64 + 1),
+                author,
+                content: content.clone(),
+                parent: None,
+                sport: Some(sport),
+                match_id: Some(match_id),
+                team: None,
+            };
+            rows.push(post.clone());
+            Ok(post)
+        }
+    }
+
+    struct StubMatches;
+    #[async_trait]
+    impl MatchRepository for StubMatches {
+        async fn list(&self) -> Result<Vec<MatchRow>, RepoError> {
+            Ok(vec![match_row()])
+        }
+        async fn by_id(&self, id: i64) -> Result<Option<MatchRow>, RepoError> {
+            Ok((id == 1).then(match_row))
+        }
+    }
+
+    fn match_row() -> MatchRow {
+        MatchRow {
+            id: 1,
+            sport_id: 42,
+            home_team: "PSG".into(),
+            away_team: "OM".into(),
+            kickoff: "2026-07-07T20:00:00Z".into(),
+            status: "scheduled".into(),
+            home_score: None,
+            away_score: None,
+        }
+    }
+
+    #[derive(Default)]
+    struct InMemoryTeamFollows {
+        rows: Mutex<Vec<(UserId, TeamId)>>,
+    }
+    #[async_trait]
+    impl TeamFollowRepository for InMemoryTeamFollows {
+        async fn follow(&self, user: UserId, team: TeamId) -> Result<bool, RepoError> {
+            let mut rows = self.rows.lock().unwrap();
+            if rows.contains(&(user, team)) {
+                return Ok(false);
+            }
+            rows.push((user, team));
+            Ok(true)
+        }
+        async fn unfollow(&self, user: UserId, team: TeamId) -> Result<bool, RepoError> {
+            let mut rows = self.rows.lock().unwrap();
+            let before = rows.len();
+            rows.retain(|pair| *pair != (user, team));
+            Ok(rows.len() != before)
+        }
+        async fn has_followed(&self, user: UserId, team: TeamId) -> Result<bool, RepoError> {
+            Ok(self.rows.lock().unwrap().contains(&(user, team)))
+        }
+    }
+
+    #[tokio::test]
+    async fn post_about_match_derives_sport_from_match() {
+        let posts = InMemoryPosts::default();
+        let matches = StubMatches;
+        let uc = PostAboutMatch::new(&posts, &matches);
+        let post = uc.execute(UserId(1), "Quel match ! #Football", 1).await.unwrap();
+        assert_eq!(post.sport, Some(SportId(42)));
+        assert_eq!(post.match_id, Some(MatchId(1)));
+
+        // Match inexistant → NotFound.
+        let err = uc.execute(UserId(1), "x", 999).await.unwrap_err();
+        assert_eq!(err, AppError::Repo(RepoError::NotFound));
+    }
+
+    #[tokio::test]
+    async fn follow_team_flips_state() {
+        let repo = InMemoryTeamFollows::default();
+        let uc = FollowTeam::new(&repo);
+        assert_eq!(uc.toggle(UserId(1), TeamId(3)).await.unwrap(), TeamFollowState { following: true });
+        assert_eq!(uc.toggle(UserId(1), TeamId(3)).await.unwrap(), TeamFollowState { following: false });
     }
 
     #[derive(Default)]

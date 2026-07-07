@@ -186,3 +186,45 @@ pub mod athlete_profile {
 
     impl ActiveModelBehavior for ActiveModel {}
 }
+
+pub mod match_event {
+    use sea_orm::entity::prelude::*;
+
+    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
+    #[sea_orm(table_name = "match_event")]
+    pub struct Model {
+        #[sea_orm(primary_key)]
+        pub id: i64,
+        pub sport_id: i64,
+        pub home_team_id: i64,
+        pub away_team_id: i64,
+        pub kickoff_at: DateTimeUtc,
+        pub status: String,
+        pub home_score: Option<i32>,
+        pub away_score: Option<i32>,
+    }
+
+    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
+    pub enum Relation {}
+
+    impl ActiveModelBehavior for ActiveModel {}
+}
+
+pub mod team_follow {
+    use sea_orm::entity::prelude::*;
+
+    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
+    #[sea_orm(table_name = "team_follow")]
+    pub struct Model {
+        #[sea_orm(primary_key)]
+        pub id: i64,
+        pub user_id: i64,
+        pub team_id: i64,
+        pub created_at: DateTimeUtc,
+    }
+
+    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
+    pub enum Relation {}
+
+    impl ActiveModelBehavior for ActiveModel {}
+}

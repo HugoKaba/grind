@@ -12,12 +12,15 @@ use sea_orm::{
 
 use grind_application::{
     AuthUserRecord, BookmarkRepository, FeedItem, FeedRepository, FollowRepository, LikeRepository,
-    LikeToggle, PostRepository, RepoError, RepostRepository, RepostToggle, UserRepository,
+    LikeToggle, MatchRepository, MatchRow, PostRepository, RepoError, RepostRepository,
+    RepostToggle, SportCatalog, SportRow, TeamFollowRepository, TeamRow, UserRepository,
 };
 use grind_domain::entities::{Follow, MatchId, Post, PostId, SportId, TeamId, UserId};
 use grind_domain::value_objects::PostContent;
 
-use super::entities::{bookmark, follow, post, post_like, repost, users};
+use super::entities::{
+    bookmark, follow, match_event, post, post_like, repost, sport, team, team_follow, users,
+};
 
 fn db_err(e: DbErr) -> RepoError {
     RepoError::Backend(e.to_string())
@@ -107,6 +110,32 @@ impl PostRepository for SeaOrmPostRepository {
             .await
             .map_err(db_err)?;
         Ok(res.rows_affected > 0)
+    }
+
+    async fn insert_about_match(
+        &self,
+        author: UserId,
+        content: &PostContent,
+        sport: SportId,
+        match_id: MatchId,
+    ) -> Result<Post, RepoError> {
+        let model = post::ActiveModel {
+            author_id: Set(author.0),
+            content: Set(content.as_str().to_owned()),
+            parent_id: Set(None),
+            sport_id: Set(Some(sport.0)),
+            match_id: Set(Some(match_id.0)),
+            team_id: Set(None),
+            likes_count: Set(0),
+            reposts_count: Set(0),
+            replies_count: Set(0),
+            created_at: Set(Utc::now()),
+            ..Default::default()
+        }
+        .insert(&self.db)
+        .await
+        .map_err(db_err)?;
+        to_domain_post(model)
     }
 }
 
@@ -651,6 +680,182 @@ impl FeedRepository for SeaOrmFeedRepository {
             .map_err(db_err)?;
         join_authors(&self.db, viewer, posts).await
     }
+
+    async fn by_match(
+        &self,
+        viewer: Option<UserId>,
+        match_id: i64,
+        limit: u64,
+    ) -> Result<Vec<FeedItem>, RepoError> {
+        let posts = post::Entity::find()
+            .filter(post::Column::MatchId.eq(match_id))
+            .order_by_desc(post::Column::CreatedAt)
+            .limit(limit)
+            .all(&self.db)
+            .await
+            .map_err(db_err)?;
+        join_authors(&self.db, viewer, posts).await
+    }
+}
+
+// ---------------------------------------------------------------------------
+
+pub struct SeaOrmSportCatalog {
+    db: DatabaseConnection,
+}
+
+impl SeaOrmSportCatalog {
+    pub fn new(db: DatabaseConnection) -> Self {
+        Self { db }
+    }
+}
+
+fn to_team_row(t: team::Model) -> TeamRow {
+    TeamRow {
+        id: t.id,
+        sport_id: t.sport_id,
+        name: t.name,
+        slug: t.slug,
+        country: t.country,
+    }
+}
+
+#[async_trait]
+impl SportCatalog for SeaOrmSportCatalog {
+    async fn list_sports(&self) -> Result<Vec<SportRow>, RepoError> {
+        let rows = sport::Entity::find().all(&self.db).await.map_err(db_err)?;
+        Ok(rows
+            .into_iter()
+            .map(|s| SportRow { id: s.id, name: s.name, slug: s.slug })
+            .collect())
+    }
+
+    async fn list_teams(&self) -> Result<Vec<TeamRow>, RepoError> {
+        let rows = team::Entity::find().all(&self.db).await.map_err(db_err)?;
+        Ok(rows.into_iter().map(to_team_row).collect())
+    }
+
+    async fn team_by_slug(&self, slug: &str) -> Result<Option<TeamRow>, RepoError> {
+        let found = team::Entity::find()
+            .filter(team::Column::Slug.eq(slug))
+            .one(&self.db)
+            .await
+            .map_err(db_err)?;
+        Ok(found.map(to_team_row))
+    }
+}
+
+// ---------------------------------------------------------------------------
+
+pub struct SeaOrmMatchRepository {
+    db: DatabaseConnection,
+}
+
+impl SeaOrmMatchRepository {
+    pub fn new(db: DatabaseConnection) -> Self {
+        Self { db }
+    }
+}
+
+/// Mappe un `match_event` vers son read model, en résolvant les noms d'équipes.
+async fn to_match_row(
+    db: &DatabaseConnection,
+    m: match_event::Model,
+) -> Result<MatchRow, RepoError> {
+    let team_name = |id: i64| {
+        let db = db.clone();
+        async move {
+            team::Entity::find_by_id(id)
+                .one(&db)
+                .await
+                .map_err(db_err)
+                .map(|t| t.map(|t| t.name).unwrap_or_default())
+        }
+    };
+    Ok(MatchRow {
+        id: m.id,
+        sport_id: m.sport_id,
+        home_team: team_name(m.home_team_id).await?,
+        away_team: team_name(m.away_team_id).await?,
+        kickoff: m.kickoff_at.to_rfc3339(),
+        status: m.status,
+        home_score: m.home_score,
+        away_score: m.away_score,
+    })
+}
+
+#[async_trait]
+impl MatchRepository for SeaOrmMatchRepository {
+    async fn list(&self) -> Result<Vec<MatchRow>, RepoError> {
+        let rows = match_event::Entity::find()
+            .order_by_asc(match_event::Column::KickoffAt)
+            .all(&self.db)
+            .await
+            .map_err(db_err)?;
+        let mut out = Vec::with_capacity(rows.len());
+        for m in rows {
+            out.push(to_match_row(&self.db, m).await?);
+        }
+        Ok(out)
+    }
+
+    async fn by_id(&self, id: i64) -> Result<Option<MatchRow>, RepoError> {
+        let Some(m) = match_event::Entity::find_by_id(id).one(&self.db).await.map_err(db_err)? else {
+            return Ok(None);
+        };
+        Ok(Some(to_match_row(&self.db, m).await?))
+    }
+}
+
+// ---------------------------------------------------------------------------
+
+pub struct SeaOrmTeamFollowRepository {
+    db: DatabaseConnection,
+}
+
+impl SeaOrmTeamFollowRepository {
+    pub fn new(db: DatabaseConnection) -> Self {
+        Self { db }
+    }
+}
+
+#[async_trait]
+impl TeamFollowRepository for SeaOrmTeamFollowRepository {
+    async fn follow(&self, user: UserId, team_id: TeamId) -> Result<bool, RepoError> {
+        if self.has_followed(user, team_id).await? {
+            return Ok(false);
+        }
+        team_follow::ActiveModel {
+            user_id: Set(user.0),
+            team_id: Set(team_id.0),
+            created_at: Set(Utc::now()),
+            ..Default::default()
+        }
+        .insert(&self.db)
+        .await
+        .map_err(db_err)?;
+        Ok(true)
+    }
+
+    async fn unfollow(&self, user: UserId, team_id: TeamId) -> Result<bool, RepoError> {
+        let res = team_follow::Entity::delete_many()
+            .filter(team_follow::Column::UserId.eq(user.0))
+            .filter(team_follow::Column::TeamId.eq(team_id.0))
+            .exec(&self.db)
+            .await
+            .map_err(db_err)?;
+        Ok(res.rows_affected > 0)
+    }
+
+    async fn has_followed(&self, user: UserId, team_id: TeamId) -> Result<bool, RepoError> {
+        let found = team_follow::Entity::find()
+            .filter(team_follow::Column::UserId.eq(user.0))
+            .filter(team_follow::Column::TeamId.eq(team_id.0))
+            .one(&self.db)
+            .await
+            .map_err(db_err)?;
+        Ok(found.is_some())
+    }
 }
 
 #[cfg(test)]
@@ -804,5 +1009,46 @@ mod tests {
         assert!(bm.has_bookmarked(UserId(2), p.id).await.unwrap());
         assert!(bm.unbookmark(UserId(2), p.id).await.unwrap());
         assert!(!bm.has_bookmarked(UserId(2), p.id).await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn sport_catalog_match_feed_and_team_follow() {
+        let db = connect_and_migrate("sqlite::memory:").await.unwrap();
+        let report = seed_reference_and_athletes(&db, &PasswordService::new()).await.unwrap();
+        assert_eq!(report.matches, 1);
+
+        // Catalogue.
+        let catalog = SeaOrmSportCatalog::new(db.clone());
+        assert_eq!(catalog.list_sports().await.unwrap().len(), 1);
+        assert_eq!(catalog.list_teams().await.unwrap().len(), 2);
+        let team = catalog.team_by_slug("inter-miami").await.unwrap().unwrap();
+        assert_eq!(team.name, "Inter Miami CF");
+
+        // Match seedé (id=1), noms d'équipes résolus.
+        let matches = SeaOrmMatchRepository::new(db.clone());
+        let m = matches.by_id(1).await.unwrap().unwrap();
+        assert_eq!(m.home_team, "Inter Miami CF");
+        assert_eq!(m.away_team, "Al Nassr FC");
+        assert_eq!(m.status, "live");
+
+        // Post about match → sport dérivé + visible dans le feed du match.
+        let posts = SeaOrmPostRepository::new(db.clone());
+        let content = PostContent::new("GOOOAL ! #Football").unwrap();
+        let p = posts
+            .insert_about_match(UserId(1), &content, SportId(m.sport_id), MatchId(m.id))
+            .await
+            .unwrap();
+        assert_eq!(p.match_id, Some(MatchId(1)));
+        let feed = SeaOrmFeedRepository::new(db.clone());
+        let items = feed.by_match(None, 1, 50).await.unwrap();
+        assert!(items.iter().any(|i| i.content.contains("GOOOAL")));
+
+        // Suivi d'équipe : toggle idempotent.
+        let tf = SeaOrmTeamFollowRepository::new(db);
+        assert!(tf.follow(UserId(1), TeamId(team.id)).await.unwrap());
+        assert!(!tf.follow(UserId(1), TeamId(team.id)).await.unwrap());
+        assert!(tf.has_followed(UserId(1), TeamId(team.id)).await.unwrap());
+        assert!(tf.unfollow(UserId(1), TeamId(team.id)).await.unwrap());
+        assert!(!tf.has_followed(UserId(1), TeamId(team.id)).await.unwrap());
     }
 }

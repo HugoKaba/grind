@@ -1,9 +1,10 @@
 //! Backfill / seed : reference data (sports, équipes) + athlètes rattachés.
 //! Remplace `seed_sports_data.py`. Mots de passe hachés en argon2 via le service auth.
 
+use chrono::Utc;
 use sea_orm::{ActiveModelTrait, DatabaseConnection, DbErr, Set};
 
-use super::entities::{athlete_profile, sport, team, users};
+use super::entities::{athlete_profile, match_event, sport, team, users};
 use crate::security::PasswordService;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -11,6 +12,7 @@ pub struct SeedReport {
     pub sports: u64,
     pub teams: u64,
     pub athletes: u64,
+    pub matches: u64,
 }
 
 /// Seed (à lancer sur une base vide / de test).
@@ -82,5 +84,19 @@ pub async fn seed_reference_and_athletes(
         .await?;
     }
 
-    Ok(SeedReport { sports: 1, teams: 2, athletes: 2 })
+    // --- Match (support live-posting) : Inter Miami vs Al Nassr ---
+    match_event::ActiveModel {
+        sport_id: Set(football.id),
+        home_team_id: Set(inter_miami.id),
+        away_team_id: Set(al_nassr.id),
+        kickoff_at: Set(Utc::now()),
+        status: Set("live".to_owned()),
+        home_score: Set(Some(1)),
+        away_score: Set(Some(1)),
+        ..Default::default()
+    }
+    .insert(db)
+    .await?;
+
+    Ok(SeedReport { sports: 1, teams: 2, athletes: 2, matches: 1 })
 }
