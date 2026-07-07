@@ -39,6 +39,13 @@ pub struct LoginRequest {
     pub password: String,
 }
 
+/// Résultat de connexion renvoyé au client (le token part en cookie HttpOnly).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LoginDto {
+    pub username: String,
+    pub is_staff: bool,
+}
+
 /// Élément de fil pour l'affichage (retour de server function, WASM-safe).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FeedItemDto {

@@ -1156,15 +1156,18 @@ name = "grind-web"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "chrono",
  "console_error_panic_hook",
  "grind-application",
  "grind-domain",
  "grind-infrastructure",
  "grind-shared",
+ "jsonwebtoken",
  "leptos",
  "leptos_axum",
  "leptos_meta",
  "leptos_router",
+ "serde",
  "tokio",
  "tower-http",
  "wasm-bindgen",

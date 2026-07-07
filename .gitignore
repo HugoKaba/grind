@@ -1,5 +1,6 @@
 # --- Rust (workspace à la racine) ---
 /target
+/target.nosync
 **/*.rs.bk
 Cargo.lock.bak
 

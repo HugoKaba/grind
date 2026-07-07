@@ -34,8 +34,14 @@ cargo leptos serve      # sert l'app hydratée sur http://127.0.0.1:3000
 ```
 
 `web/` réalise le pipeline **server functions + hydratation câblé sur les use cases réels** :
-la server function `get_timeline` lit le fil via le repo SeaORM (`DomainState` injecté dans
-le context Leptos), rendu en SSR puis hydraté (îlot compteur réactif). Vérifié runtime :
-`GET /` renvoie le post seedé en SSR + les scripts d'hydratation.
-Prochaines étapes : server functions `login`/`create_post` (+ cookie), migration des
-pages/admin de `app/` vers `web/`.
+- `get_timeline` (lecture), `login` (pose un cookie de session HttpOnly), `create_post`
+  (auth par cookie) — toutes câblées sur les use cases via `DomainState` injecté dans le
+  context Leptos ;
+- UI hydratée : formulaires (`ActionForm`) connexion + publication, fil `<Suspense>` qui se
+  recharge après chaque post, îlot compteur réactif.
+
+Vérifié runtime : `login` → 200 + cookie ; `create_post` avec cookie → 200 puis le post
+apparaît dans le fil SSR ; sans cookie → « Non authentifié ».
+
+Prochaines étapes : migrer les pages détail/profil + l'admin de `app/` vers `web/`,
+puis retirer `app/` (fusion).

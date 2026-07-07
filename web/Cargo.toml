@@ -15,6 +15,7 @@ leptos_axum = { version = "0.7", optional = true }
 
 # DTOs partagés client/serveur (WASM-safe)
 grind-shared = { path = "../crates/shared" }
+serde = { workspace = true }
 # Couches serveur (server functions) — SSR uniquement
 grind-domain = { path = "../crates/domain", optional = true }
 grind-application = { path = "../crates/application", optional = true }
@@ -23,6 +24,8 @@ grind-infrastructure = { path = "../crates/infrastructure", optional = true }
 axum = { version = "0.7", optional = true }
 tokio = { version = "1", features = ["rt-multi-thread", "macros"], optional = true }
 tower-http = { version = "0.6", features = ["fs"], optional = true }
+jsonwebtoken = { version = "9", optional = true }
+chrono = { version = "0.4", default-features = false, features = ["clock"], optional = true }
 
 wasm-bindgen = { version = "0.2", optional = true }
 console_error_panic_hook = { version = "0.1", optional = true }
@@ -38,6 +41,8 @@ ssr = [
     "dep:grind-domain",
     "dep:grind-application",
     "dep:grind-infrastructure",
+    "dep:jsonwebtoken",
+    "dep:chrono",
     "leptos/ssr",
     "leptos_meta/ssr",
     "leptos_router/ssr",
