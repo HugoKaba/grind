@@ -48,6 +48,23 @@ pub trait FollowRepository: Send + Sync {
     async fn exists(&self, follower: UserId, following: UserId) -> Result<bool, RepoError>;
 }
 
+/// Résultat d'un (dé)like : compteur mis à jour **atomiquement** côté repo.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct LikeToggle {
+    /// `true` si l'état a réellement changé (like créé / supprimé).
+    pub changed: bool,
+    /// Nombre de likes du post après opération.
+    pub likes_count: i64,
+}
+
+#[async_trait]
+pub trait LikeRepository: Send + Sync {
+    /// Ajoute un like (idempotent) + incrémente atomiquement `likes_count`.
+    async fn like(&self, user: UserId, post: PostId) -> Result<LikeToggle, RepoError>;
+    /// Retire un like (idempotent) + décrémente atomiquement `likes_count`.
+    async fn unlike(&self, user: UserId, post: PostId) -> Result<LikeToggle, RepoError>;
+}
+
 // ---------------------------------------------------------------------------
 // Use cases — orchestrent domaine + ports. Zéro dépendance framework.
 // ---------------------------------------------------------------------------
@@ -92,6 +109,25 @@ impl<'a, R: FollowRepository> FollowUser<'a, R> {
         }
         let created = self.repo.add(&follow).await?;
         Ok(created)
+    }
+}
+
+/// Like / unlike un post. La cohérence du compteur est garantie par le repo.
+pub struct ToggleLike<'a, R: LikeRepository> {
+    repo: &'a R,
+}
+
+impl<'a, R: LikeRepository> ToggleLike<'a, R> {
+    pub fn new(repo: &'a R) -> Self {
+        Self { repo }
+    }
+
+    pub async fn like(&self, user: UserId, post: PostId) -> Result<LikeToggle, AppError> {
+        Ok(self.repo.like(user, post).await?)
+    }
+
+    pub async fn unlike(&self, user: UserId, post: PostId) -> Result<LikeToggle, AppError> {
+        Ok(self.repo.unlike(user, post).await?)
     }
 }
 
@@ -181,5 +217,52 @@ mod tests {
 
         let err = uc.execute(UserId(1), UserId(1)).await.unwrap_err();
         assert_eq!(err, AppError::Domain(DomainError::SelfFollow));
+    }
+
+    #[derive(Default)]
+    struct InMemoryLikes {
+        likes: Mutex<Vec<(UserId, PostId)>>,
+    }
+
+    #[async_trait]
+    impl LikeRepository for InMemoryLikes {
+        async fn like(&self, user: UserId, post: PostId) -> Result<LikeToggle, RepoError> {
+            let mut likes = self.likes.lock().unwrap();
+            let changed = if likes.contains(&(user, post)) {
+                false
+            } else {
+                likes.push((user, post));
+                true
+            };
+            let count = likes.iter().filter(|(_, p)| *p == post).count() as i64;
+            Ok(LikeToggle { changed, likes_count: count })
+        }
+        async fn unlike(&self, user: UserId, post: PostId) -> Result<LikeToggle, RepoError> {
+            let mut likes = self.likes.lock().unwrap();
+            let before = likes.len();
+            likes.retain(|pair| *pair != (user, post));
+            let changed = likes.len() != before;
+            let count = likes.iter().filter(|(_, p)| *p == post).count() as i64;
+            Ok(LikeToggle { changed, likes_count: count })
+        }
+    }
+
+    #[tokio::test]
+    async fn toggle_like_is_idempotent_and_counts() {
+        let repo = InMemoryLikes::default();
+        let uc = ToggleLike::new(&repo);
+        let post = PostId(7);
+
+        let r = uc.like(UserId(1), post).await.unwrap();
+        assert_eq!(r, LikeToggle { changed: true, likes_count: 1 });
+        // re-like : pas de changement, compteur stable
+        let r = uc.like(UserId(1), post).await.unwrap();
+        assert_eq!(r, LikeToggle { changed: false, likes_count: 1 });
+        // autre user
+        let r = uc.like(UserId(2), post).await.unwrap();
+        assert_eq!(r, LikeToggle { changed: true, likes_count: 2 });
+        // unlike
+        let r = uc.unlike(UserId(1), post).await.unwrap();
+        assert_eq!(r, LikeToggle { changed: true, likes_count: 1 });
     }
 }
