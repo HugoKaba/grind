@@ -61,6 +61,21 @@ pub struct FollowStateDto {
     pub following: bool,
 }
 
+/// État d'un repost renvoyé après un toggle (WASM-safe).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RepostStateDto {
+    pub post_id: i64,
+    pub reposted: bool,
+    pub reposts_count: i64,
+}
+
+/// État d'un bookmark renvoyé après un toggle (privé, WASM-safe).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BookmarkStateDto {
+    pub post_id: i64,
+    pub bookmarked: bool,
+}
+
 /// Élément de fil pour l'affichage (retour de server function, WASM-safe).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FeedItemDto {
@@ -72,8 +87,10 @@ pub struct FeedItemDto {
     pub reposts_count: i64,
     pub replies_count: i64,
     pub created_at: String,
-    /// `true` si l'utilisateur courant a liké ce post (`false` si anonyme).
+    /// Flags viewer-aware (tous `false` si anonyme).
     pub liked_by_me: bool,
+    pub reposted_by_me: bool,
+    pub bookmarked_by_me: bool,
 }
 
 /// Page profil (viewer-aware) : posts de l'athlète + état de suivi pour l'observateur.

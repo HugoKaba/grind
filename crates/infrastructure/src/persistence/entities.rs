@@ -126,6 +126,44 @@ pub mod post_like {
     impl ActiveModelBehavior for ActiveModel {}
 }
 
+pub mod repost {
+    use sea_orm::entity::prelude::*;
+
+    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
+    #[sea_orm(table_name = "repost")]
+    pub struct Model {
+        #[sea_orm(primary_key)]
+        pub id: i64,
+        pub user_id: i64,
+        pub post_id: i64,
+        pub created_at: DateTimeUtc,
+    }
+
+    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
+    pub enum Relation {}
+
+    impl ActiveModelBehavior for ActiveModel {}
+}
+
+pub mod bookmark {
+    use sea_orm::entity::prelude::*;
+
+    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
+    #[sea_orm(table_name = "bookmark")]
+    pub struct Model {
+        #[sea_orm(primary_key)]
+        pub id: i64,
+        pub user_id: i64,
+        pub post_id: i64,
+        pub created_at: DateTimeUtc,
+    }
+
+    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
+    pub enum Relation {}
+
+    impl ActiveModelBehavior for ActiveModel {}
+}
+
 pub mod athlete_profile {
     use sea_orm::entity::prelude::*;
 

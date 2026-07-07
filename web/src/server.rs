@@ -272,6 +272,45 @@ mod tests {
         assert!(body.contains("\"liked\":false"), "attendu liked=false, reçu: {body}");
         assert!(body.contains("\"likes_count\":0"), "attendu likes_count=0, reçu: {body}");
 
+        // toggle_repost (messi) sur id=1 → reposted=true, count=1 ; re-toggle → 0
+        let resp = app
+            .clone()
+            .oneshot(form("/api/toggle_repost", Some(&messi), "id=1"))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = body_string(resp).await;
+        assert!(body.contains("\"reposted\":true") && body.contains("\"reposts_count\":1"), "{body}");
+        let resp = app
+            .clone()
+            .oneshot(form("/api/toggle_repost", Some(&messi), "id=1"))
+            .await
+            .unwrap();
+        assert!(body_string(resp).await.contains("\"reposted\":false"));
+
+        // toggle_repost sans cookie → refusé
+        let resp = app
+            .clone()
+            .oneshot(form("/api/toggle_repost", None, "id=1"))
+            .await
+            .unwrap();
+        assert_ne!(resp.status(), StatusCode::OK);
+
+        // toggle_bookmark (messi) sur id=1 → bookmarked=true ; re-toggle → false
+        let resp = app
+            .clone()
+            .oneshot(form("/api/toggle_bookmark", Some(&messi), "id=1"))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        assert!(body_string(resp).await.contains("\"bookmarked\":true"));
+        let resp = app
+            .clone()
+            .oneshot(form("/api/toggle_bookmark", Some(&messi), "id=1"))
+            .await
+            .unwrap();
+        assert!(body_string(resp).await.contains("\"bookmarked\":false"));
+
         // toggle_follow sans cookie → refusé
         let resp = app
             .clone()

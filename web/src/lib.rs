@@ -11,7 +11,10 @@ use leptos_router::components::{Route, Router, Routes, A};
 use leptos_router::hooks::use_params_map;
 use leptos_router::path;
 
-use grind_shared::{FeedItemDto, FollowStateDto, LikeStateDto, LoginDto, ProfileDto};
+use grind_shared::{
+    BookmarkStateDto, FeedItemDto, FollowStateDto, LikeStateDto, LoginDto, ProfileDto,
+    RepostStateDto,
+};
 
 #[cfg(feature = "ssr")]
 pub mod auth;
@@ -71,11 +74,19 @@ fn Home() -> impl IntoView {
     let register = ServerAction::<Register>::new();
     let create = ServerAction::<CreatePost>::new();
     let like = ServerAction::<ToggleLike>::new();
+    let repost = ServerAction::<ToggleRepost>::new();
+    let bookmark = ServerAction::<ToggleBookmark>::new();
 
-    // Le fil se recharge après chaque publication OU (dé)like : la source combine
-    // les deux versions d'action, donc tout changement re-déclenche le fetch.
+    // Le fil se recharge après toute action (publication / like / repost / bookmark).
     let timeline = Resource::new(
-        move || (create.version().get(), like.version().get()),
+        move || {
+            (
+                create.version().get(),
+                like.version().get(),
+                repost.version().get(),
+                bookmark.version().get(),
+            )
+        },
         |_| get_timeline(),
     );
 
@@ -131,19 +142,29 @@ fn Home() -> impl IntoView {
                                         .into_iter()
                                         .map(|i| {
                                             let id = i.id;
-                                            // Libellé du bouton selon l'état persistant renvoyé par le serveur.
-                                            let label = if i.liked_by_me { "❤ Liké" } else { "🤍 Liker" };
+                                            // Libellés selon l'état persistant renvoyé par le serveur.
+                                            let like_label = if i.liked_by_me { "❤ Liké" } else { "🤍 Liker" };
+                                            let repost_label = if i.reposted_by_me { "🔁 Reposté" } else { "🔁 Repost" };
+                                            let bm_label = if i.bookmarked_by_me { "🔖 Enregistré" } else { "🔖 Enregistrer" };
                                             view! {
                                                 <li class="post">
                                                     <strong>"@"{i.author_username}</strong>
                                                     " · "
                                                     <span>{i.content}</span>
                                                     " — "
-                                                    <em>{i.likes_count}" ❤"</em>
+                                                    <em>{i.likes_count}" ❤ · "{i.reposts_count}" 🔁"</em>
                                                     " "
                                                     <ActionForm action=like>
                                                         <input type="hidden" name="id" value=id />
-                                                        <button type="submit">{label}</button>
+                                                        <button type="submit">{like_label}</button>
+                                                    </ActionForm>
+                                                    <ActionForm action=repost>
+                                                        <input type="hidden" name="id" value=id />
+                                                        <button type="submit">{repost_label}</button>
+                                                    </ActionForm>
+                                                    <ActionForm action=bookmark>
+                                                        <input type="hidden" name="id" value=id />
+                                                        <button type="submit">{bm_label}</button>
                                                     </ActionForm>
                                                 </li>
                                             }
@@ -315,6 +336,8 @@ fn to_dto(i: grind_application::FeedItem) -> FeedItemDto {
         replies_count: i.replies_count,
         created_at: i.created_at,
         liked_by_me: i.liked_by_me,
+        reposted_by_me: i.reposted_by_me,
+        bookmarked_by_me: i.bookmarked_by_me,
     }
 }
 
@@ -566,6 +589,8 @@ pub async fn create_post(content: String) -> Result<FeedItemDto, ServerFnError> 
         replies_count: 0,
         created_at: String::new(),
         liked_by_me: false,
+        reposted_by_me: false,
+        bookmarked_by_me: false,
     })
 }
 
@@ -586,6 +611,37 @@ pub async fn toggle_like(id: i64) -> Result<LikeStateDto, ServerFnError> {
         .map_err(|e| ServerFnError::new(e.to_string()))?;
 
     Ok(LikeStateDto { post_id: id, liked: s.liked, likes_count: s.likes_count })
+}
+
+/// Server function : bascule le repost d'un post (controller pur ; orchestration
+/// dans `ToggleRepost`).
+#[server(endpoint = "toggle_repost")]
+pub async fn toggle_repost(id: i64) -> Result<RepostStateDto, ServerFnError> {
+    let state = domain_state()?;
+    let claims = require_claims(&state).await?;
+    let s = grind_application::ToggleRepost::new(&*state.reposts)
+        .toggle(
+            grind_domain::entities::UserId(claims.sub),
+            grind_domain::entities::PostId(id),
+        )
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?;
+    Ok(RepostStateDto { post_id: id, reposted: s.reposted, reposts_count: s.reposts_count })
+}
+
+/// Server function : bascule le bookmark d'un post (privé, controller pur).
+#[server(endpoint = "toggle_bookmark")]
+pub async fn toggle_bookmark(id: i64) -> Result<BookmarkStateDto, ServerFnError> {
+    let state = domain_state()?;
+    let claims = require_claims(&state).await?;
+    let s = grind_application::ToggleBookmark::new(&*state.bookmarks)
+        .toggle(
+            grind_domain::entities::UserId(claims.sub),
+            grind_domain::entities::PostId(id),
+        )
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?;
+    Ok(BookmarkStateDto { post_id: id, bookmarked: s.bookmarked })
 }
 
 /// Point d'entrée d'hydratation côté client (WASM).

@@ -10,7 +10,10 @@ pub struct Migrator;
 #[async_trait::async_trait]
 impl MigratorTrait for Migrator {
     fn migrations() -> Vec<Box<dyn MigrationTrait>> {
-        vec![Box::new(m0001_init::Migration)]
+        vec![
+            Box::new(m0001_init::Migration),
+            Box::new(m0002_repost_bookmark::Migration),
+        ]
     }
 }
 
@@ -222,6 +225,61 @@ mod m0001_init {
                 "sport",
                 "users",
             ] {
+                m.drop_table(Table::drop().table(a(t)).if_exists().to_owned()).await?;
+            }
+            Ok(())
+        }
+    }
+}
+
+/// Interactions ajoutées : repost (compteur `reposts_count` déjà sur `post`)
+/// et bookmark (privé, sans compteur public). Tables jumelles de `post_like`.
+mod m0002_repost_bookmark {
+    use super::a;
+    use sea_orm_migration::prelude::*;
+
+    pub struct Migration;
+
+    impl MigrationName for Migration {
+        fn name(&self) -> &str {
+            "m0002_repost_bookmark"
+        }
+    }
+
+    /// Fabrique une table d'interaction (user_id, post_id) + unicité de la paire.
+    fn interaction_table(table: &str, uniq_index: &str) -> (TableCreateStatement, IndexCreateStatement) {
+        let create = Table::create()
+            .table(a(table))
+            .if_not_exists()
+            .col(ColumnDef::new(a("id")).big_integer().not_null().auto_increment().primary_key())
+            .col(ColumnDef::new(a("user_id")).big_integer().not_null())
+            .col(ColumnDef::new(a("post_id")).big_integer().not_null())
+            .col(ColumnDef::new(a("created_at")).timestamp_with_time_zone().not_null())
+            .to_owned();
+        let index = Index::create()
+            .if_not_exists()
+            .unique()
+            .name(uniq_index)
+            .table(a(table))
+            .col(a("user_id"))
+            .col(a("post_id"))
+            .to_owned();
+        (create, index)
+    }
+
+    #[async_trait::async_trait]
+    impl MigrationTrait for Migration {
+        async fn up(&self, m: &SchemaManager) -> Result<(), DbErr> {
+            for (table, uniq) in [("repost", "uq_repost_pair"), ("bookmark", "uq_bookmark_pair")] {
+                let (create, index) = interaction_table(table, uniq);
+                m.create_table(create).await?;
+                m.create_index(index).await?;
+            }
+            Ok(())
+        }
+
+        async fn down(&self, m: &SchemaManager) -> Result<(), DbErr> {
+            for t in ["bookmark", "repost"] {
                 m.drop_table(Table::drop().table(a(t)).if_exists().to_owned()).await?;
             }
             Ok(())

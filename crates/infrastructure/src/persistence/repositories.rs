@@ -11,13 +11,13 @@ use sea_orm::{
 };
 
 use grind_application::{
-    AuthUserRecord, FeedItem, FeedRepository, FollowRepository, LikeRepository, LikeToggle,
-    PostRepository, RepoError, UserRepository,
+    AuthUserRecord, BookmarkRepository, FeedItem, FeedRepository, FollowRepository, LikeRepository,
+    LikeToggle, PostRepository, RepoError, RepostRepository, RepostToggle, UserRepository,
 };
 use grind_domain::entities::{Follow, MatchId, Post, PostId, SportId, TeamId, UserId};
 use grind_domain::value_objects::PostContent;
 
-use super::entities::{follow, post, post_like, users};
+use super::entities::{bookmark, follow, post, post_like, repost, users};
 
 fn db_err(e: DbErr) -> RepoError {
     RepoError::Backend(e.to_string())
@@ -264,6 +264,155 @@ impl LikeRepository for SeaOrmLikeRepository {
 
 // ---------------------------------------------------------------------------
 
+async fn reposts_count<C: ConnectionTrait>(conn: &C, post_id: i64) -> Result<i64, RepoError> {
+    let model = post::Entity::find_by_id(post_id)
+        .one(conn)
+        .await
+        .map_err(db_err)?
+        .ok_or(RepoError::NotFound)?;
+    Ok(model.reposts_count)
+}
+
+pub struct SeaOrmRepostRepository {
+    db: DatabaseConnection,
+}
+
+impl SeaOrmRepostRepository {
+    pub fn new(db: DatabaseConnection) -> Self {
+        Self { db }
+    }
+}
+
+#[async_trait]
+impl RepostRepository for SeaOrmRepostRepository {
+    async fn repost(&self, user: UserId, post_id: PostId) -> Result<RepostToggle, RepoError> {
+        let txn = self.db.begin().await.map_err(db_err)?;
+
+        let existing = repost::Entity::find()
+            .filter(repost::Column::UserId.eq(user.0))
+            .filter(repost::Column::PostId.eq(post_id.0))
+            .one(&txn)
+            .await
+            .map_err(db_err)?;
+
+        if existing.is_some() {
+            let count = reposts_count(&txn, post_id.0).await?;
+            txn.commit().await.map_err(db_err)?;
+            return Ok(RepostToggle { changed: false, reposts_count: count });
+        }
+
+        repost::ActiveModel {
+            user_id: Set(user.0),
+            post_id: Set(post_id.0),
+            created_at: Set(Utc::now()),
+            ..Default::default()
+        }
+        .insert(&txn)
+        .await
+        .map_err(db_err)?;
+
+        post::Entity::update_many()
+            .col_expr(post::Column::RepostsCount, Expr::col(post::Column::RepostsCount).add(1))
+            .filter(post::Column::Id.eq(post_id.0))
+            .exec(&txn)
+            .await
+            .map_err(db_err)?;
+
+        let count = reposts_count(&txn, post_id.0).await?;
+        txn.commit().await.map_err(db_err)?;
+        Ok(RepostToggle { changed: true, reposts_count: count })
+    }
+
+    async fn unrepost(&self, user: UserId, post_id: PostId) -> Result<RepostToggle, RepoError> {
+        let txn = self.db.begin().await.map_err(db_err)?;
+
+        let deleted = repost::Entity::delete_many()
+            .filter(repost::Column::UserId.eq(user.0))
+            .filter(repost::Column::PostId.eq(post_id.0))
+            .exec(&txn)
+            .await
+            .map_err(db_err)?;
+
+        let changed = deleted.rows_affected > 0;
+        if changed {
+            post::Entity::update_many()
+                .col_expr(post::Column::RepostsCount, Expr::col(post::Column::RepostsCount).sub(1))
+                .filter(post::Column::Id.eq(post_id.0))
+                .exec(&txn)
+                .await
+                .map_err(db_err)?;
+        }
+
+        let count = reposts_count(&txn, post_id.0).await?;
+        txn.commit().await.map_err(db_err)?;
+        Ok(RepostToggle { changed, reposts_count: count })
+    }
+
+    async fn has_reposted(&self, user: UserId, post_id: PostId) -> Result<bool, RepoError> {
+        let found = repost::Entity::find()
+            .filter(repost::Column::UserId.eq(user.0))
+            .filter(repost::Column::PostId.eq(post_id.0))
+            .one(&self.db)
+            .await
+            .map_err(db_err)?;
+        Ok(found.is_some())
+    }
+}
+
+// ---------------------------------------------------------------------------
+
+pub struct SeaOrmBookmarkRepository {
+    db: DatabaseConnection,
+}
+
+impl SeaOrmBookmarkRepository {
+    pub fn new(db: DatabaseConnection) -> Self {
+        Self { db }
+    }
+}
+
+#[async_trait]
+impl BookmarkRepository for SeaOrmBookmarkRepository {
+    async fn bookmark(&self, user: UserId, post_id: PostId) -> Result<bool, RepoError> {
+        let existing = self.has_bookmarked(user, post_id).await?;
+        if existing {
+            return Ok(false);
+        }
+        bookmark::ActiveModel {
+            user_id: Set(user.0),
+            post_id: Set(post_id.0),
+            created_at: Set(Utc::now()),
+            ..Default::default()
+        }
+        .insert(&self.db)
+        .await
+        .map_err(db_err)?;
+        Ok(true)
+    }
+
+    async fn unbookmark(&self, user: UserId, post_id: PostId) -> Result<bool, RepoError> {
+        let deleted = bookmark::Entity::delete_many()
+            .filter(bookmark::Column::UserId.eq(user.0))
+            .filter(bookmark::Column::PostId.eq(post_id.0))
+            .exec(&self.db)
+            .await
+            .map_err(db_err)?;
+        Ok(deleted.rows_affected > 0)
+    }
+
+    async fn has_bookmarked(&self, user: UserId, post_id: PostId) -> Result<bool, RepoError> {
+        let found = bookmark::Entity::find()
+            .filter(bookmark::Column::UserId.eq(user.0))
+            .filter(bookmark::Column::PostId.eq(post_id.0))
+            .one(&self.db)
+            .await
+            .map_err(db_err)?;
+        Ok(found.is_some())
+    }
+}
+
+// ---------------------------------------------------------------------------
+
 pub struct SeaOrmUserRepository {
     db: DatabaseConnection,
 }
@@ -349,27 +498,36 @@ impl SeaOrmFeedRepository {
     }
 }
 
-/// Set des `post_id` likés par `viewer` parmi `post_ids`, en **une** requête.
-/// Vide si `viewer` est anonyme (`None`). Sert à renseigner `liked_by_me` sans N+1.
-async fn liked_set(
-    db: &DatabaseConnection,
-    viewer: Option<UserId>,
-    post_ids: &[i64],
-) -> Result<std::collections::HashSet<i64>, RepoError> {
-    let Some(viewer) = viewer else {
-        return Ok(std::collections::HashSet::new());
+/// Macro : génère une fonction « set des post_id de `viewer` dans la table
+/// d'interaction donnée » — une requête bornée, vide si anonyme. Factorise les
+/// trois relations (like/repost/bookmark) qui ont la même forme (user_id, post_id).
+macro_rules! interaction_set_fn {
+    ($fn_name:ident, $entity:ty, $col:ty) => {
+        async fn $fn_name(
+            db: &DatabaseConnection,
+            viewer: Option<UserId>,
+            post_ids: &[i64],
+        ) -> Result<std::collections::HashSet<i64>, RepoError> {
+            let Some(viewer) = viewer else {
+                return Ok(std::collections::HashSet::new());
+            };
+            let rows = <$entity>::find()
+                .filter(<$col>::UserId.eq(viewer.0))
+                .filter(<$col>::PostId.is_in(post_ids.to_vec()))
+                .all(db)
+                .await
+                .map_err(db_err)?;
+            Ok(rows.into_iter().map(|r| r.post_id).collect())
+        }
     };
-    let rows = post_like::Entity::find()
-        .filter(post_like::Column::UserId.eq(viewer.0))
-        .filter(post_like::Column::PostId.is_in(post_ids.to_vec()))
-        .all(db)
-        .await
-        .map_err(db_err)?;
-    Ok(rows.into_iter().map(|r| r.post_id).collect())
 }
 
-/// Joint une liste de posts à leurs auteurs **et** à l'état de like de l'observateur,
-/// en **deux** requêtes bornées (auteurs + likes) — pas de N+1.
+interaction_set_fn!(liked_set, post_like::Entity, post_like::Column);
+interaction_set_fn!(reposted_set, repost::Entity, repost::Column);
+interaction_set_fn!(bookmarked_set, bookmark::Entity, bookmark::Column);
+
+/// Joint une liste de posts à leurs auteurs **et** aux états de l'observateur
+/// (liké/reposté/bookmarké), en requêtes bornées — pas de N+1.
 async fn join_authors(
     db: &DatabaseConnection,
     viewer: Option<UserId>,
@@ -386,6 +544,8 @@ async fn join_authors(
         .await
         .map_err(db_err)?;
     let liked = liked_set(db, viewer, &post_ids).await?;
+    let reposted = reposted_set(db, viewer, &post_ids).await?;
+    let bookmarked = bookmarked_set(db, viewer, &post_ids).await?;
 
     Ok(posts
         .into_iter()
@@ -401,6 +561,8 @@ async fn join_authors(
                 replies_count: p.replies_count,
                 created_at: p.created_at.to_rfc3339(),
                 liked_by_me: liked.contains(&p.id),
+                reposted_by_me: reposted.contains(&p.id),
+                bookmarked_by_me: bookmarked.contains(&p.id),
             }
         })
         .collect())
@@ -615,5 +777,32 @@ mod tests {
         assert!(contents.contains(&"post de messi"), "doit inclure ses propres posts");
         assert!(contents.contains(&"post de ronaldo"), "doit inclure les suivis");
         assert!(!contents.contains(&"post d'un inconnu"), "doit exclure les non-suivis");
+    }
+
+    #[tokio::test]
+    async fn repost_counts_atomically_and_bookmark_is_private() {
+        let db = connect_and_migrate("sqlite::memory:").await.unwrap();
+        seed_reference_and_athletes(&db, &PasswordService::new()).await.unwrap();
+        let posts = SeaOrmPostRepository::new(db.clone());
+        let p = posts.insert(UserId(1), &PostContent::new("Golazo!").unwrap(), None).await.unwrap();
+
+        // Repost : compteur atomique + idempotence.
+        let reposts = SeaOrmRepostRepository::new(db.clone());
+        assert_eq!(reposts.repost(UserId(2), p.id).await.unwrap().reposts_count, 1);
+        assert!(!reposts.repost(UserId(2), p.id).await.unwrap().changed);
+        assert!(reposts.has_reposted(UserId(2), p.id).await.unwrap());
+        assert_eq!(reposts.unrepost(UserId(2), p.id).await.unwrap().reposts_count, 0);
+
+        // Le compteur sur le post reflète bien l'opération.
+        let model = post::Entity::find_by_id(p.id.0).one(&db).await.unwrap().unwrap();
+        assert_eq!(model.reposts_count, 0);
+
+        // Bookmark : idempotent, sans compteur public.
+        let bm = SeaOrmBookmarkRepository::new(db.clone());
+        assert!(bm.bookmark(UserId(2), p.id).await.unwrap());
+        assert!(!bm.bookmark(UserId(2), p.id).await.unwrap());
+        assert!(bm.has_bookmarked(UserId(2), p.id).await.unwrap());
+        assert!(bm.unbookmark(UserId(2), p.id).await.unwrap());
+        assert!(!bm.has_bookmarked(UserId(2), p.id).await.unwrap());
     }
 }

@@ -74,6 +74,29 @@ pub trait LikeRepository: Send + Sync {
     async fn has_liked(&self, user: UserId, post: PostId) -> Result<bool, RepoError>;
 }
 
+/// Résultat d'un (dé)repost : compteur `reposts_count` mis à jour atomiquement.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RepostToggle {
+    pub changed: bool,
+    pub reposts_count: i64,
+}
+
+#[async_trait]
+pub trait RepostRepository: Send + Sync {
+    async fn repost(&self, user: UserId, post: PostId) -> Result<RepostToggle, RepoError>;
+    async fn unrepost(&self, user: UserId, post: PostId) -> Result<RepostToggle, RepoError>;
+    async fn has_reposted(&self, user: UserId, post: PostId) -> Result<bool, RepoError>;
+}
+
+#[async_trait]
+pub trait BookmarkRepository: Send + Sync {
+    /// Ajoute un bookmark (idempotent). `true` si créé. Pas de compteur public.
+    async fn bookmark(&self, user: UserId, post: PostId) -> Result<bool, RepoError>;
+    /// Retire un bookmark (idempotent). `true` si retiré.
+    async fn unbookmark(&self, user: UserId, post: PostId) -> Result<bool, RepoError>;
+    async fn has_bookmarked(&self, user: UserId, post: PostId) -> Result<bool, RepoError>;
+}
+
 /// Enregistrement minimal pour l'authentification.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AuthUserRecord {
@@ -122,8 +145,11 @@ pub struct FeedItem {
     pub reposts_count: i64,
     pub replies_count: i64,
     pub created_at: String,
-    /// `true` si l'observateur (`viewer`) a liké ce post. `false` si anonyme.
+    /// Flags viewer-aware : état de l'observateur (`viewer`) vis-à-vis du post.
+    /// Tous `false` si anonyme.
     pub liked_by_me: bool,
+    pub reposted_by_me: bool,
+    pub bookmarked_by_me: bool,
 }
 
 #[async_trait]
@@ -264,6 +290,61 @@ impl<'a, R: LikeRepository + ?Sized> ToggleLike<'a, R> {
         } else {
             let t = self.repo.like(user, post).await?;
             Ok(LikeState { liked: true, likes_count: t.likes_count })
+        }
+    }
+}
+
+/// État repost renvoyé au client après un toggle.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RepostState {
+    pub reposted: bool,
+    pub reposts_count: i64,
+}
+
+/// Repost / unrepost un post (compteur `reposts_count` géré atomiquement par le repo).
+pub struct ToggleRepost<'a, R: RepostRepository + ?Sized> {
+    repo: &'a R,
+}
+
+impl<'a, R: RepostRepository + ?Sized> ToggleRepost<'a, R> {
+    pub fn new(repo: &'a R) -> Self {
+        Self { repo }
+    }
+
+    pub async fn toggle(&self, user: UserId, post: PostId) -> Result<RepostState, AppError> {
+        if self.repo.has_reposted(user, post).await? {
+            let t = self.repo.unrepost(user, post).await?;
+            Ok(RepostState { reposted: false, reposts_count: t.reposts_count })
+        } else {
+            let t = self.repo.repost(user, post).await?;
+            Ok(RepostState { reposted: true, reposts_count: t.reposts_count })
+        }
+    }
+}
+
+/// État bookmark renvoyé au client (privé, sans compteur public).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BookmarkState {
+    pub bookmarked: bool,
+}
+
+/// Bookmark / unbookmark un post.
+pub struct ToggleBookmark<'a, R: BookmarkRepository + ?Sized> {
+    repo: &'a R,
+}
+
+impl<'a, R: BookmarkRepository + ?Sized> ToggleBookmark<'a, R> {
+    pub fn new(repo: &'a R) -> Self {
+        Self { repo }
+    }
+
+    pub async fn toggle(&self, user: UserId, post: PostId) -> Result<BookmarkState, AppError> {
+        if self.repo.has_bookmarked(user, post).await? {
+            self.repo.unbookmark(user, post).await?;
+            Ok(BookmarkState { bookmarked: false })
+        } else {
+            self.repo.bookmark(user, post).await?;
+            Ok(BookmarkState { bookmarked: true })
         }
     }
 }
@@ -565,6 +646,81 @@ mod tests {
         // déjà liké → toggle = unlike
         let s = uc.toggle(UserId(1), post).await.unwrap();
         assert_eq!(s, LikeState { liked: false, likes_count: 0 });
+    }
+
+    #[derive(Default)]
+    struct InMemoryReposts {
+        rows: Mutex<Vec<(UserId, PostId)>>,
+    }
+
+    #[async_trait]
+    impl RepostRepository for InMemoryReposts {
+        async fn repost(&self, user: UserId, post: PostId) -> Result<RepostToggle, RepoError> {
+            let mut rows = self.rows.lock().unwrap();
+            let changed = if rows.contains(&(user, post)) {
+                false
+            } else {
+                rows.push((user, post));
+                true
+            };
+            let count = rows.iter().filter(|(_, p)| *p == post).count() as i64;
+            Ok(RepostToggle { changed, reposts_count: count })
+        }
+        async fn unrepost(&self, user: UserId, post: PostId) -> Result<RepostToggle, RepoError> {
+            let mut rows = self.rows.lock().unwrap();
+            let before = rows.len();
+            rows.retain(|pair| *pair != (user, post));
+            let changed = rows.len() != before;
+            let count = rows.iter().filter(|(_, p)| *p == post).count() as i64;
+            Ok(RepostToggle { changed, reposts_count: count })
+        }
+        async fn has_reposted(&self, user: UserId, post: PostId) -> Result<bool, RepoError> {
+            Ok(self.rows.lock().unwrap().contains(&(user, post)))
+        }
+    }
+
+    #[tokio::test]
+    async fn toggle_repost_flips_state_and_counts() {
+        let repo = InMemoryReposts::default();
+        let uc = ToggleRepost::new(&repo);
+        let post = PostId(5);
+        assert_eq!(uc.toggle(UserId(1), post).await.unwrap(), RepostState { reposted: true, reposts_count: 1 });
+        assert_eq!(uc.toggle(UserId(1), post).await.unwrap(), RepostState { reposted: false, reposts_count: 0 });
+    }
+
+    #[derive(Default)]
+    struct InMemoryBookmarks {
+        rows: Mutex<Vec<(UserId, PostId)>>,
+    }
+
+    #[async_trait]
+    impl BookmarkRepository for InMemoryBookmarks {
+        async fn bookmark(&self, user: UserId, post: PostId) -> Result<bool, RepoError> {
+            let mut rows = self.rows.lock().unwrap();
+            if rows.contains(&(user, post)) {
+                return Ok(false);
+            }
+            rows.push((user, post));
+            Ok(true)
+        }
+        async fn unbookmark(&self, user: UserId, post: PostId) -> Result<bool, RepoError> {
+            let mut rows = self.rows.lock().unwrap();
+            let before = rows.len();
+            rows.retain(|pair| *pair != (user, post));
+            Ok(rows.len() != before)
+        }
+        async fn has_bookmarked(&self, user: UserId, post: PostId) -> Result<bool, RepoError> {
+            Ok(self.rows.lock().unwrap().contains(&(user, post)))
+        }
+    }
+
+    #[tokio::test]
+    async fn toggle_bookmark_flips_state() {
+        let repo = InMemoryBookmarks::default();
+        let uc = ToggleBookmark::new(&repo);
+        let post = PostId(9);
+        assert_eq!(uc.toggle(UserId(1), post).await.unwrap(), BookmarkState { bookmarked: true });
+        assert_eq!(uc.toggle(UserId(1), post).await.unwrap(), BookmarkState { bookmarked: false });
     }
 
     #[derive(Default)]

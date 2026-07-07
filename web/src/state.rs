@@ -4,12 +4,12 @@
 use std::sync::Arc;
 
 use grind_application::{
-    FeedRepository, FollowRepository, LikeRepository, PasswordHasher, PostRepository,
-    UserRepository,
+    BookmarkRepository, FeedRepository, FollowRepository, LikeRepository, PasswordHasher,
+    PostRepository, RepostRepository, UserRepository,
 };
 use grind_infrastructure::persistence::{
-    DatabaseConnection, SeaOrmFeedRepository, SeaOrmFollowRepository, SeaOrmLikeRepository,
-    SeaOrmPostRepository, SeaOrmUserRepository,
+    DatabaseConnection, SeaOrmBookmarkRepository, SeaOrmFeedRepository, SeaOrmFollowRepository,
+    SeaOrmLikeRepository, SeaOrmPostRepository, SeaOrmRepostRepository, SeaOrmUserRepository,
 };
 use grind_infrastructure::security::PasswordService;
 
@@ -18,6 +18,8 @@ pub struct DomainState {
     pub feed: Arc<dyn FeedRepository>,
     pub posts: Arc<dyn PostRepository>,
     pub likes: Arc<dyn LikeRepository>,
+    pub reposts: Arc<dyn RepostRepository>,
+    pub bookmarks: Arc<dyn BookmarkRepository>,
     pub follows: Arc<dyn FollowRepository>,
     pub users: Arc<dyn UserRepository>,
     pub hasher: Arc<dyn PasswordHasher>,
@@ -30,6 +32,8 @@ impl DomainState {
             feed: Arc::new(SeaOrmFeedRepository::new(db.clone())),
             posts: Arc::new(SeaOrmPostRepository::new(db.clone())),
             likes: Arc::new(SeaOrmLikeRepository::new(db.clone())),
+            reposts: Arc::new(SeaOrmRepostRepository::new(db.clone())),
+            bookmarks: Arc::new(SeaOrmBookmarkRepository::new(db.clone())),
             follows: Arc::new(SeaOrmFollowRepository::new(db.clone())),
             users: Arc::new(SeaOrmUserRepository::new(db)),
             hasher: Arc::new(PasswordService::new()),
