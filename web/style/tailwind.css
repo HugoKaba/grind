@@ -379,7 +379,18 @@ body {
   margin-top: 8px;
 }
 
-/* ── Page de connexion / inscription (/login) ──────────────────────────── */
+/* ── Overlay d'authentification (plein écran, tant que non connecté) ────── */
+.auth-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+  overflow-y: auto;
+  background: linear-gradient(135deg, #dc2626 0%, #7f1d1d 100%);
+}
 .auth-wrap {
   min-height: 100vh;
   display: flex;
@@ -387,6 +398,55 @@ body {
   justify-content: center;
   padding: 40px 16px;
   background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%);
+}
+
+/* Onglets toggle Connexion / Créer un compte */
+.auth-tabs {
+  display: flex;
+  gap: 6px;
+  background: #f3f4f6;
+  border-radius: 10px;
+  padding: 4px;
+  margin: 18px 0 6px;
+}
+.auth-tab {
+  flex: 1;
+  border: none;
+  background: transparent;
+  padding: 9px 8px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #4b5563;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.auth-tab.active {
+  background: #ffffff;
+  color: #991b1b;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+/* Carte utilisateur (sidebar, en bas) */
+.user-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  text-decoration: none;
+  color: #1f2937;
+  margin-top: 8px;
+}
+.user-card:hover {
+  background: #f3f4f6;
+}
+.user-card-name {
+  font-weight: 600;
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .auth-card {
   background: #ffffff;

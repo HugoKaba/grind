@@ -25,6 +25,11 @@ pub fn session_cookie(token: &str) -> String {
     format!("session={token}; HttpOnly; Path=/; SameSite=Lax; Max-Age=86400")
 }
 
+/// Cookie de déconnexion : vide la session (Max-Age=0 → suppression immédiate).
+pub fn clear_session_cookie() -> String {
+    "session=; HttpOnly; Path=/; SameSite=Lax; Max-Age=0".to_owned()
+}
+
 pub fn decode_token(secret: &str, token: &str) -> Option<Claims> {
     decode::<Claims>(
         token,

@@ -190,6 +190,15 @@ fn ic_feather() -> impl IntoView {
         </svg>
     }
 }
+fn ic_logout() -> impl IntoView {
+    view! {
+        <svg class="ic" viewBox="0 0 24 24">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+            <path d="M16 17l5-5-5-5" />
+            <line x1="21" y1="12" x2="9" y2="12" />
+        </svg>
+    }
+}
 
 /// Initiale majuscule d'un pseudo (pour l'avatar).
 fn initial(name: &str) -> String {
@@ -243,6 +252,20 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
 #[component]
 pub fn App() -> impl IntoView {
     provide_meta_context();
+    // Actions d'authentification + état connecté (garde côté client).
+    let login = ServerAction::<Login>::new();
+    let register = ServerAction::<Register>::new();
+    let logout = ServerAction::<Logout>::new();
+    let me = Resource::new(
+        move || {
+            (
+                login.version().get(),
+                register.version().get(),
+                logout.version().get(),
+            )
+        },
+        |_| me(),
+    );
     view! {
         <Stylesheet id="leptos" href="/pkg/grind.css" />
         <Title text="GRIND — Réseau social sport" />
@@ -279,17 +302,37 @@ pub fn App() -> impl IntoView {
                         <A href="/trending" attr:class="nav-item">{ic_fire()}<span>"Trending"</span></A>
                         <A href="/notifications" attr:class="nav-item">{ic_bell()}<span>"Notifications"</span></A>
                         <A href="/messages" attr:class="nav-item">{ic_mail()}<span>"Messages"</span></A>
-                        <A href="/login" attr:class="nav-item">{ic_user()}<span>"Connexion"</span></A>
-                        <A href="/admin" attr:class="nav-item">{ic_shield()}<span>"Admin"</span></A>
+                        {move || me.get().and_then(|r| r.ok()).flatten().map(|u| {
+                            let href = format!("/u/{}", u.username);
+                            view! { <A href=href attr:class="nav-item">{ic_user()}<span>"Profil"</span></A> }
+                        })}
                     </nav>
+                    // Carte utilisateur + déconnexion (visible si connecté)
+                    <Suspense>
+                        {move || me.get().and_then(|r| r.ok()).flatten().map(|u| {
+                            let href = format!("/u/{}", u.username);
+                            let ini = initial(&u.username);
+                            let uname = u.username.clone();
+                            view! {
+                                <A href=href attr:class="user-card">
+                                    <div class="avatar avatar-blue" style="width:36px; height:36px; font-size:14px;">{ini}</div>
+                                    <span class="user-card-name">"@"{uname}</span>
+                                </A>
+                                <ActionForm action=logout>
+                                    <button type="submit" class="nav-item" style="width:100%; border:none; background:none;">
+                                        {ic_logout()}<span>"Déconnexion"</span>
+                                    </button>
+                                </ActionForm>
+                            }
+                        })}
+                    </Suspense>
                     <A href="/" attr:class="post-btn">{ic_pen()}<span>"Publier"</span></A>
                 </aside>
 
-                // ── Colonne centrale : contenu de la route ──
+                // ── Colonne centrale : contenu de la route (toujours monté) ──
                 <main class="feed-container">
                     <Routes fallback=|| view! { <div class="empty-state">"Page introuvable."</div> }>
                         <Route path=path!("/") view=Home />
-                        <Route path=path!("/login") view=LoginPage />
                         <Route path=path!("/post/:id") view=PostDetail />
                         <Route path=path!("/u/:username") view=Profile />
                         <Route path=path!("/sports") view=Sports />
@@ -306,7 +349,7 @@ pub fn App() -> impl IntoView {
                 // ── Sidebar droite : recherche + trending ──
                 <aside class="right-sidebar">
                     <div style="margin-bottom:24px; position:relative;">
-                        <input type="text" placeholder="Search Sports..." class="search-input" aria-label="Rechercher un sport" />
+                        <input type="text" placeholder="Rechercher un sport…" class="search-input" aria-label="Rechercher un sport" />
                     </div>
                     <div class="tag-warning">
                         {ic_info()}
@@ -315,19 +358,27 @@ pub fn App() -> impl IntoView {
                             "utilisez #sujet pour taguer vos posts (ex : #Football, #Basketball)"
                         </span>
                     </div>
-                    <h3 class="trending-title" style="margin-bottom:16px;">"Trending in Sports"</h3>
+                    <h3 class="trending-title" style="margin-bottom:16px;">"Tendances sport"</h3>
                     <TrendingAside />
                 </aside>
             </div>
 
             // ── Navigation mobile (bas) ──
-            <nav class="mobile-nav">
+            <nav class="mobile-nav" aria-label="Navigation mobile">
                 <A href="/" attr:aria-label="Accueil">{ic_home()}</A>
                 <A href="/trending" attr:aria-label="Trending">{ic_fire()}</A>
                 <A href="/" attr:aria-label="Nouveau post">{ic_pen()}</A>
                 <A href="/notifications" attr:aria-label="Notifications">{ic_bell()}</A>
                 <A href="/messages" attr:aria-label="Messages">{ic_mail()}</A>
             </nav>
+
+            // ── Garde d'authentification : overlay plein écran si déconnecté ──
+            <Suspense>
+                {move || {
+                    let logged = matches!(me.get(), Some(Ok(Some(_))));
+                    (!logged).then(|| view! { <AuthOverlay login=login register=register /> })
+                }}
+            </Suspense>
         </Router>
     }
 }
@@ -364,61 +415,70 @@ fn TrendingAside() -> impl IntoView {
 //  Pages
 // ════════════════════════════════════════════════════════════════════════
 
-/// Page de connexion / inscription dédiée (route `/login`).
-/// Formulaires labellisés (accessibilité) + autocomplete + carte façon Django.
+/// Overlay d'authentification plein écran (affiché tant que non connecté).
+/// Bascule Connexion / Créer un compte (un seul formulaire visible à la fois).
 #[component]
-fn LoginPage() -> impl IntoView {
-    let login = ServerAction::<Login>::new();
-    let register = ServerAction::<Register>::new();
+fn AuthOverlay(
+    login: ServerAction<Login>,
+    register: ServerAction<Register>,
+) -> impl IntoView {
+    let (is_register, set_is_register) = signal(false);
     view! {
-        <Title text="Connexion / GRIND" />
-        <Meta name="description" content="Connectez-vous à GRIND ou créez votre compte pour publier, suivre des athlètes, liker et reposter." />
-        <div class="auth-wrap">
-            <section class="auth-card" aria-labelledby="auth-title">
+        <div class="auth-overlay" role="dialog" aria-modal="true" aria-labelledby="auth-title">
+            <section class="auth-card">
                 <div class="auth-logo">{ic_dumbbell()}<span>"GRIND"</span></div>
-                <h1 id="auth-title" class="auth-title">"Connexion"</h1>
-                <p class="auth-sub">"Le réseau social des sportifs — connectez-vous à votre compte."</p>
+                <h1 id="auth-title" class="auth-title">
+                    {move || if is_register.get() { "Créer un compte" } else { "Bon retour !" }}
+                </h1>
+                <p class="auth-sub">"Le réseau social des sportifs — publiez, suivez, likez, repostez."</p>
 
-                <ActionForm action=login>
-                    <label for="login-username">"Nom d'utilisateur"</label>
-                    <input id="login-username" class="field" type="text" name="username"
-                        autocomplete="username" placeholder="ex : messi" required=true />
-                    <label for="login-password">"Mot de passe"</label>
-                    <input id="login-password" class="field" type="password" name="password"
-                        autocomplete="current-password" placeholder="Votre mot de passe" required=true />
-                    <button type="submit" class="btn-post" style="width:100%; margin-top:10px;">"Se connecter"</button>
-                </ActionForm>
-                {move || match login.value().get() {
-                    Some(Ok(u)) => view! { <p class="form-msg-ok" role="status">"Connecté : @"{u.username}" ✓"</p> }.into_any(),
-                    Some(Err(e)) => view! { <p class="form-msg-err" role="alert">"Échec de connexion : "{e.to_string()}</p> }.into_any(),
-                    None => ().into_any(),
-                }}
-
-                <div class="auth-hint">
-                    {ic_info()}
-                    <span><strong>"Comptes de test : "</strong>"messi ou ronaldo — mot de passe "<code>"grind1234"</code></span>
+                <div class="auth-tabs" role="tablist">
+                    <button type="button" role="tab" class="auth-tab" class:active=move || !is_register.get()
+                        aria-selected=move || (!is_register.get()).to_string()
+                        on:click=move |_| set_is_register.set(false)>"Se connecter"</button>
+                    <button type="button" role="tab" class="auth-tab" class:active=move || is_register.get()
+                        aria-selected=move || is_register.get().to_string()
+                        on:click=move |_| set_is_register.set(true)>"Créer un compte"</button>
                 </div>
 
-                <div class="auth-divider"><span>"Pas encore de compte ?"</span></div>
+                <Show when=move || !is_register.get()>
+                    <ActionForm action=login>
+                        <label for="login-username">"Nom d'utilisateur"</label>
+                        <input id="login-username" class="field" type="text" name="username"
+                            autocomplete="username" placeholder="ex : messi" required=true />
+                        <label for="login-password">"Mot de passe"</label>
+                        <input id="login-password" class="field" type="password" name="password"
+                            autocomplete="current-password" placeholder="Votre mot de passe" required=true />
+                        <button type="submit" class="btn-post" style="width:100%; margin-top:12px;">"Se connecter"</button>
+                    </ActionForm>
+                    {move || match login.value().get() {
+                        Some(Err(e)) => view! { <p class="form-msg-err" role="alert">"Échec : "{e.to_string()}</p> }.into_any(),
+                        _ => ().into_any(),
+                    }}
+                    <div class="auth-hint">
+                        {ic_info()}
+                        <span><strong>"Comptes de test : "</strong>"messi ou ronaldo · "<code>"grind1234"</code></span>
+                    </div>
+                </Show>
 
-                <h2 class="auth-title" style="font-size:16px;">"Créer un compte"</h2>
-                <ActionForm action=register>
-                    <label for="reg-username">"Nom d'utilisateur"</label>
-                    <input id="reg-username" class="field" type="text" name="username"
-                        autocomplete="username" placeholder="lettres, chiffres, _" required=true />
-                    <label for="reg-display">"Nom affiché (optionnel)"</label>
-                    <input id="reg-display" class="field" type="text" name="display_name"
-                        autocomplete="name" placeholder="ex : Lionel Messi" />
-                    <label for="reg-password">"Mot de passe (8 caractères min)"</label>
-                    <input id="reg-password" class="field" type="password" name="password"
-                        autocomplete="new-password" placeholder="Choisissez un mot de passe" required=true />
-                    <button type="submit" class="btn-post" style="width:100%; margin-top:10px;">"Créer le compte"</button>
-                </ActionForm>
-                {move || match register.value().get() {
-                    Some(Ok(u)) => view! { <p class="form-msg-ok" role="status">"Compte créé et connecté : @"{u.username}" ✓"</p> }.into_any(),
-                    Some(Err(e)) => view! { <p class="form-msg-err" role="alert">"Échec : "{e.to_string()}</p> }.into_any(),
-                    None => ().into_any(),
-                }}
+                <Show when=move || is_register.get()>
+                    <ActionForm action=register>
+                        <label for="reg-username">"Nom d'utilisateur"</label>
+                        <input id="reg-username" class="field" type="text" name="username"
+                            autocomplete="username" placeholder="lettres, chiffres, _" required=true />
+                        <label for="reg-display">"Nom affiché (optionnel)"</label>
+                        <input id="reg-display" class="field" type="text" name="display_name"
+                            autocomplete="name" placeholder="ex : Lionel Messi" />
+                        <label for="reg-password">"Mot de passe (8 caractères min)"</label>
+                        <input id="reg-password" class="field" type="password" name="password"
+                            autocomplete="new-password" placeholder="Choisissez un mot de passe" required=true />
+                        <button type="submit" class="btn-post" style="width:100%; margin-top:12px;">"Créer mon compte"</button>
+                    </ActionForm>
+                    {move || match register.value().get() {
+                        Some(Err(e)) => view! { <p class="form-msg-err" role="alert">"Échec : "{e.to_string()}</p> }.into_any(),
+                        _ => ().into_any(),
+                    }}
+                </Show>
             </section>
         </div>
     }
@@ -1339,6 +1399,31 @@ fn set_session_cookie(
     response.insert_header(
         axum::http::header::SET_COOKIE,
         axum::http::HeaderValue::from_str(&auth::session_cookie(&token))
+            .map_err(|e| ServerFnError::new(e.to_string()))?,
+    );
+    Ok(())
+}
+
+/// Server function : utilisateur connecté (depuis le cookie) ou `None`.
+/// Sert de garde d'authentification côté client (gate).
+#[server(endpoint = "me")]
+pub async fn me() -> Result<Option<LoginDto>, ServerFnError> {
+    let state = domain_state()?;
+    let Ok(headers) = leptos_axum::extract::<axum::http::HeaderMap>().await else {
+        return Ok(None);
+    };
+    let claims =
+        auth::token_from_headers(&headers).and_then(|t| auth::decode_token(&state.jwt_secret, &t));
+    Ok(claims.map(|c| LoginDto { username: c.username, is_staff: c.is_staff }))
+}
+
+/// Server function : déconnexion (efface le cookie de session).
+#[server(endpoint = "logout")]
+pub async fn logout() -> Result<(), ServerFnError> {
+    let response = expect_context::<leptos_axum::ResponseOptions>();
+    response.insert_header(
+        axum::http::header::SET_COOKIE,
+        axum::http::HeaderValue::from_str(&auth::clear_session_cookie())
             .map_err(|e| ServerFnError::new(e.to_string()))?,
     );
     Ok(())
