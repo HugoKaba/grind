@@ -1,0 +1,6 @@
+=== SYNTHÈSE MÉMOIRE ===
+Serveur Rust GRIND (release) — empreinte mémoire (RSS)
+  Repos                    : 13 Mo
+  Pic sous charge SANS cache : 36 Mo
+  Pic sous charge AVEC cache : 19 Mo
+  (Référence Django/Python : ~100-150 Mo par worker gunicorn)

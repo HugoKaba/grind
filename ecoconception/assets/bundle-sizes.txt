@@ -1,0 +1,8 @@
+# POIDS DES ASSETS FRONT (release + wasm-opt) — Wed Jul  8 10:57:49 CEST 2026
+
+grind.wasm   brut= 1502886 o  gzip=  490403 o  brotli(servi)=  436021 o
+grind.js     brut=   25030 o  gzip=    7098 o  brotli(servi)=    7176 o
+grind.css    brut=   11092 o  gzip=    3020 o  brotli(servi)=    3016 o
+
+# Total transféré au 1er chargement (brotli, release) :
+  HTML + WASM + JS + CSS (brotli) = 449497 o (~438 Ko)

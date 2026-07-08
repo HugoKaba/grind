@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="820" height="210" font-family="system-ui,Arial">
+<rect width="820" height="210" fill="#fff"/>
+<text x="20" y="30" font-size="16" font-weight="700" fill="#111">Charge k6 sur get_trending — débit ×2,44 grâce au cache</text>
+<text x="20" y="50" font-size="12" fill="#6b7280">40 VUs · 20 s · latence moyenne 2,06 ms → 0,80 ms (−61%)</text>
+<text x="20" y="92" font-size="13" fill="#374151">Sans cache (BDD)</text>
+  <rect x="210" y="70" width="205.28069014114584" height="34" rx="4" fill="#ff4e42"/>
+  <text x="423.28069014114584" y="92" font-size="13" font-weight="700" fill="#111">19,227 req/s</text><text x="20" y="152" font-size="13" fill="#374151">Avec cache (Redis)</text>
+  <rect x="210" y="130" width="500" height="34" rx="4" fill="#0cce6b"/>
+  <text x="718" y="152" font-size="13" font-weight="700" fill="#111">46,831 req/s</text></svg>

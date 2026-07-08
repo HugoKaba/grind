@@ -1,0 +1,7 @@
+# Contournement d'un bug du nouveau linker Apple (`ld-prime`) :
+#   ld: Assertion failed: (name.size() <= maxLength) … SymbolString.cpp
+# déclenché en release par les longs noms de symboles générés par les vues
+# Leptos (closures imbriquées). On force l'ancien linker `ld_classic` UNIQUEMENT
+# pour la cible native (serveur SSR) ; la cible WASM n'est pas affectée.
+[target.aarch64-apple-darwin]
+rustflags = ["-C", "link-arg=-Wl,-ld_classic"]

@@ -19,6 +19,38 @@ async fn main() {
     use grind_web::state::DomainState;
     use leptos::config::get_configuration;
 
+    // --- Profiling continu Grafana Pyroscope : actif uniquement si PYROSCOPE_URL défini.
+    //     Taggé `cache=on|off` (selon REDIS_URL) pour comparer AVANT/APRÈS dans la vue diff. ---
+    let _pyroscope_guard = match std::env::var("PYROSCOPE_URL") {
+        Ok(url) => {
+            let cache_tag = if std::env::var("REDIS_URL").is_ok() { "on" } else { "off" };
+            let backend = pyroscope_pprofrs::pprof_backend(
+                pyroscope_pprofrs::PprofConfig::new().sample_rate(100),
+            );
+            match pyroscope::PyroscopeAgent::builder(url.as_str(), "grind-web")
+                .backend(backend)
+                .tags([("cache", cache_tag)].to_vec())
+                .build()
+            {
+                Ok(agent) => match agent.start() {
+                    Ok(running) => {
+                        leptos::logging::log!("Pyroscope actif (tag cache={cache_tag}).");
+                        Some(running)
+                    }
+                    Err(e) => {
+                        leptos::logging::log!("Pyroscope start échec : {e}");
+                        None
+                    }
+                },
+                Err(e) => {
+                    leptos::logging::log!("Pyroscope build échec : {e}");
+                    None
+                }
+            }
+        }
+        Err(_) => None,
+    };
+
     // --- Base de données : Postgres en prod (DATABASE_URL), SQLite mémoire par défaut ---
     let database_url =
         std::env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite::memory:".to_owned());

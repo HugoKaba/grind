@@ -3,6 +3,10 @@
 //! App Leptos **full-stack hydratée** (SSR + WASM). Les server functions sont
 //! câblées sur les use cases/repos réels via le context Leptos (`DomainState`),
 //! injecté côté serveur. Construite avec `cargo leptos build`.
+//!
+//! UI : réplique fidèle du design Django d'origine (thème clair « X/Twitter
+//! sport », layout 3 colonnes, accent rouge #dc2626). Icônes en **SVG inline**
+//! (auto-hébergées, éco) — Font Awesome (CDN) a été retiré.
 
 use leptos::form::ActionForm;
 use leptos::prelude::*;
@@ -28,6 +32,195 @@ pub mod server;
 #[cfg(feature = "ssr")]
 pub mod state;
 
+// ════════════════════════════════════════════════════════════════════════
+//  Icônes SVG inline (remplacent Font Awesome). Style porté par `.ic` en CSS.
+// ════════════════════════════════════════════════════════════════════════
+
+fn ic_dumbbell() -> impl IntoView {
+    view! {
+        <svg class="ic" viewBox="0 0 24 24">
+            <rect x="1" y="8" width="3" height="8" rx="1" />
+            <rect x="20" y="8" width="3" height="8" rx="1" />
+            <rect x="4" y="10" width="2" height="4" />
+            <rect x="18" y="10" width="2" height="4" />
+            <line x1="6" y1="12" x2="18" y2="12" />
+        </svg>
+    }
+}
+fn ic_home() -> impl IntoView {
+    view! {
+        <svg class="ic" viewBox="0 0 24 24">
+            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+            <path d="M9 22V12h6v10" />
+        </svg>
+    }
+}
+fn ic_fire() -> impl IntoView {
+    view! {
+        <svg class="ic" viewBox="0 0 24 24">
+            <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z" />
+        </svg>
+    }
+}
+fn ic_bell() -> impl IntoView {
+    view! {
+        <svg class="ic" viewBox="0 0 24 24">
+            <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
+            <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+        </svg>
+    }
+}
+fn ic_mail() -> impl IntoView {
+    view! {
+        <svg class="ic" viewBox="0 0 24 24">
+            <rect x="2" y="4" width="20" height="16" rx="2" />
+            <path d="M22 6l-10 7L2 6" />
+        </svg>
+    }
+}
+fn ic_bookmark() -> impl IntoView {
+    view! {
+        <svg class="ic" viewBox="0 0 24 24">
+            <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+        </svg>
+    }
+}
+fn ic_user() -> impl IntoView {
+    view! {
+        <svg class="ic" viewBox="0 0 24 24">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+            <circle cx="12" cy="7" r="4" />
+        </svg>
+    }
+}
+fn ic_pen() -> impl IntoView {
+    view! {
+        <svg class="ic" viewBox="0 0 24 24">
+            <path d="M12 20h9" />
+            <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4z" />
+        </svg>
+    }
+}
+fn ic_heart() -> impl IntoView {
+    view! {
+        <svg class="ic" viewBox="0 0 24 24">
+            <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+        </svg>
+    }
+}
+fn ic_repeat() -> impl IntoView {
+    view! {
+        <svg class="ic" viewBox="0 0 24 24">
+            <path d="M17 1l4 4-4 4" />
+            <path d="M3 11V9a4 4 0 0 1 4-4h14" />
+            <path d="M7 23l-4-4 4-4" />
+            <path d="M21 13v2a4 4 0 0 1-4 4H3" />
+        </svg>
+    }
+}
+fn ic_reply() -> impl IntoView {
+    view! {
+        <svg class="ic" viewBox="0 0 24 24">
+            <path d="M9 14L4 9l5-5" />
+            <path d="M20 20v-7a4 4 0 0 0-4-4H4" />
+        </svg>
+    }
+}
+fn ic_share() -> impl IntoView {
+    view! {
+        <svg class="ic" viewBox="0 0 24 24">
+            <circle cx="18" cy="5" r="3" />
+            <circle cx="6" cy="12" r="3" />
+            <circle cx="18" cy="19" r="3" />
+            <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
+            <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
+        </svg>
+    }
+}
+fn ic_arrow_left() -> impl IntoView {
+    view! {
+        <svg class="ic" viewBox="0 0 24 24">
+            <line x1="19" y1="12" x2="5" y2="12" />
+            <path d="M12 19l-7-7 7-7" />
+        </svg>
+    }
+}
+fn ic_info() -> impl IntoView {
+    view! {
+        <svg class="ic" viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="10" />
+            <line x1="12" y1="16" x2="12" y2="12" />
+            <line x1="12" y1="8" x2="12.01" y2="8" />
+        </svg>
+    }
+}
+fn ic_search() -> impl IntoView {
+    view! {
+        <svg class="ic" viewBox="0 0 24 24">
+            <circle cx="11" cy="11" r="8" />
+            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+        </svg>
+    }
+}
+fn ic_trophy() -> impl IntoView {
+    view! {
+        <svg class="ic" viewBox="0 0 24 24">
+            <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" />
+            <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18" />
+            <path d="M4 22h16" />
+            <path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22" />
+            <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22" />
+            <path d="M18 2H6v7a6 6 0 0 0 12 0V2z" />
+        </svg>
+    }
+}
+fn ic_shield() -> impl IntoView {
+    view! {
+        <svg class="ic" viewBox="0 0 24 24">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+        </svg>
+    }
+}
+fn ic_feather() -> impl IntoView {
+    view! {
+        <svg class="ic" viewBox="0 0 24 24">
+            <path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z" />
+            <line x1="16" y1="8" x2="2" y2="22" />
+            <line x1="17.5" y1="15" x2="9" y2="15" />
+        </svg>
+    }
+}
+
+/// Initiale majuscule d'un pseudo (pour l'avatar).
+fn initial(name: &str) -> String {
+    name.chars()
+        .next()
+        .map(|c| c.to_uppercase().to_string())
+        .unwrap_or_default()
+}
+
+/// Formate une date ISO (`2026-07-08T…`) en date courte FR (`8 juil.`), sans
+/// dépendance runtime. Chaîne vide ou non-ISO → renvoyée telle quelle.
+fn short_date(iso: &str) -> String {
+    let b = iso.as_bytes();
+    if b.len() >= 10 && b[4] == b'-' && b[7] == b'-' {
+        let mois = [
+            "janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.",
+            "nov.", "déc.",
+        ];
+        let m: usize = iso[5..7].parse().unwrap_or(0);
+        let day = iso[8..10].trim_start_matches('0');
+        if (1..=12).contains(&m) {
+            return format!("{day} {}", mois[m - 1]);
+        }
+    }
+    iso.to_string()
+}
+
+// ════════════════════════════════════════════════════════════════════════
+//  Shell + layout applicatif (3 colonnes)
+// ════════════════════════════════════════════════════════════════════════
+
 /// Document HTML (shell) — injecté par le serveur, hydraté par le client.
 pub fn shell(options: LeptosOptions) -> impl IntoView {
     view! {
@@ -52,41 +245,112 @@ pub fn App() -> impl IntoView {
     provide_meta_context();
     view! {
         <Stylesheet id="leptos" href="/pkg/grind.css" />
-        <Title text="GRIND" />
+        <Title text="GRIND - Sports Social Network" />
         <Router>
-            <nav class="nav">
-                <span class="mr-2 font-extrabold tracking-tight text-slate-100">"🏟️ GRIND"</span>
-                <A href="/">"Accueil"</A>
-                <A href="/sports">"Sports"</A>
-                <A href="/trending">"Trending"</A>
-                <A href="/messages">"Messages"</A>
-                <A href="/notifications">"Notifs"</A>
-                <A href="/admin">"Admin"</A>
+            // ── Barre mobile (haut) ──
+            <div class="mobile-header">
+                {ic_dumbbell()}
+                <span>"GRIND"</span>
+            </div>
+
+            <div class="main-container">
+                // ── Sidebar gauche : logo + navigation ──
+                <aside class="sidebar">
+                    <div class="grind-logo">
+                        {ic_dumbbell()}
+                        <span>"GRIND"</span>
+                    </div>
+                    <nav style="flex:1;">
+                        <A href="/" attr:class="nav-item">{ic_home()}<span>"Home"</span></A>
+                        <A href="/sports" attr:class="nav-item">{ic_trophy()}<span>"Sports"</span></A>
+                        <A href="/trending" attr:class="nav-item">{ic_fire()}<span>"Trending"</span></A>
+                        <A href="/notifications" attr:class="nav-item">{ic_bell()}<span>"Notifications"</span></A>
+                        <A href="/messages" attr:class="nav-item">{ic_mail()}<span>"Messages"</span></A>
+                        <A href="/admin" attr:class="nav-item">{ic_shield()}<span>"Admin"</span></A>
+                    </nav>
+                    <A href="/" attr:class="post-btn">{ic_pen()}<span>"Post Update"</span></A>
+                </aside>
+
+                // ── Colonne centrale : contenu de la route ──
+                <main class="feed-container">
+                    <Routes fallback=|| view! { <div class="empty-state">"Page introuvable."</div> }>
+                        <Route path=path!("/") view=Home />
+                        <Route path=path!("/post/:id") view=PostDetail />
+                        <Route path=path!("/u/:username") view=Profile />
+                        <Route path=path!("/sports") view=Sports />
+                        <Route path=path!("/trending") view=Trending />
+                        <Route path=path!("/team/:slug") view=Team />
+                        <Route path=path!("/match/:id") view=MatchPage />
+                        <Route path=path!("/messages") view=Messages />
+                        <Route path=path!("/messages/:username") view=Thread />
+                        <Route path=path!("/notifications") view=Notifications />
+                        <Route path=path!("/admin") view=Admin />
+                    </Routes>
+                </main>
+
+                // ── Sidebar droite : recherche + trending ──
+                <aside class="right-sidebar">
+                    <div style="margin-bottom:24px; position:relative;">
+                        <input type="text" placeholder="Search Sports..." class="search-input" aria-label="Rechercher un sport" />
+                    </div>
+                    <div class="tag-warning">
+                        {ic_info()}
+                        <span>
+                            <strong>"Hashtags : "</strong>
+                            "utilisez #sujet pour taguer vos posts (ex : #Football, #Basketball)"
+                        </span>
+                    </div>
+                    <h3 class="trending-title" style="margin-bottom:16px;">"Trending in Sports"</h3>
+                    <TrendingAside />
+                </aside>
+            </div>
+
+            // ── Navigation mobile (bas) ──
+            <nav class="mobile-nav">
+                <A href="/" attr:aria-label="Accueil">{ic_home()}</A>
+                <A href="/trending" attr:aria-label="Trending">{ic_fire()}</A>
+                <A href="/" attr:aria-label="Nouveau post">{ic_pen()}</A>
+                <A href="/notifications" attr:aria-label="Notifications">{ic_bell()}</A>
+                <A href="/messages" attr:aria-label="Messages">{ic_mail()}</A>
             </nav>
-            <main class="page">
-                <Routes fallback=|| "Page introuvable.".into_view()>
-                    <Route path=path!("/") view=Home />
-                    <Route path=path!("/post/:id") view=PostDetail />
-                    <Route path=path!("/u/:username") view=Profile />
-                    <Route path=path!("/sports") view=Sports />
-                    <Route path=path!("/trending") view=Trending />
-                    <Route path=path!("/team/:slug") view=Team />
-                    <Route path=path!("/match/:id") view=MatchPage />
-                    <Route path=path!("/messages") view=Messages />
-                    <Route path=path!("/messages/:username") view=Thread />
-                    <Route path=path!("/notifications") view=Notifications />
-                    <Route path=path!("/admin") view=Admin />
-                </Routes>
-            </main>
         </Router>
     }
 }
 
+/// Liste « trending » décorative de la sidebar droite (fidèle au design Django).
+#[component]
+fn TrendingAside() -> impl IntoView {
+    let items = [
+        ("⚽ Football", "#ChampionsLeague", "892K posts"),
+        ("🏀 Basketball", "#NBA", "456K posts"),
+        ("🎾 Tennis", "#Wimbledon", "234K posts"),
+        ("🏈 Football", "#NFL", "567K posts"),
+        ("🏒 Hockey", "#StanleyCup", "178K posts"),
+    ];
+    view! {
+        <div>
+            {items
+                .into_iter()
+                .map(|(cat, tag, count)| {
+                    view! {
+                        <A href="/trending" attr:class="trending-item">
+                            <div style="font-size:13px; color:#6b7280;">{cat}</div>
+                            <div class="trending-title">{tag}</div>
+                            <div class="trending-subtitle">{count}</div>
+                        </A>
+                    }
+                })
+                .collect_view()}
+        </div>
+    }
+}
+
+// ════════════════════════════════════════════════════════════════════════
+//  Pages
+// ════════════════════════════════════════════════════════════════════════
+
 #[component]
 fn Home() -> impl IntoView {
-    // Îlot interactif (hydratation client).
-    let (count, set_count) = signal(0);
-
     // Server actions (formulaires → server functions).
     let login = ServerAction::<Login>::new();
     let register = ServerAction::<Register>::new();
@@ -109,93 +373,156 @@ fn Home() -> impl IntoView {
     );
 
     view! {
-        <h1>"🏟️ GRIND"</h1>
-        <button on:click=move |_| *set_count.write() += 1>"Likes locaux : " {count}</button>
+        // En-tête « Home »
+        <div class="header-bar">
+            <h2 class="header-title" style="margin-bottom:12px;">"Home"</h2>
+            <div class="tabs">
+                <span class="tab active">"Everyone"</span>
+            </div>
+        </div>
 
-        <h2>"Connexion"</h2>
-        <ActionForm action=login>
-            <input type="text" name="username" placeholder="username (ex: messi)" />
-            <input type="password" name="password" placeholder="mot de passe (grind1234)" />
-            <button type="submit">"Se connecter"</button>
-        </ActionForm>
-        <p>
-            {move || match login.value().get() {
-                Some(Ok(u)) => format!("Connecté : @{} (staff : {})", u.username, u.is_staff),
-                Some(Err(e)) => format!("Échec : {e}"),
-                None => String::new(),
-            }}
-        </p>
+        // Connexion / Inscription (compact, style Django)
+        <div class="form-card">
+            <div style="display:flex; gap:24px; flex-wrap:wrap;">
+                <div style="flex:1; min-width:220px;">
+                    <h3 style="font-weight:700; color:#111827; margin-bottom:6px;">
+                        {ic_user()}" Connexion"
+                    </h3>
+                    <ActionForm action=login>
+                        <input class="field" type="text" name="username" placeholder="username (ex : messi)" />
+                        <input class="field" type="password" name="password" placeholder="mot de passe (grind1234)" />
+                        <button type="submit" class="btn-post" style="margin-top:6px;">"Se connecter"</button>
+                    </ActionForm>
+                    {move || match login.value().get() {
+                        Some(Ok(u)) => view! { <p class="form-msg-ok">"Connecté : @"{u.username}</p> }.into_any(),
+                        Some(Err(e)) => view! { <p class="form-msg-err">"Échec : "{e.to_string()}</p> }.into_any(),
+                        None => ().into_any(),
+                    }}
+                </div>
+                <div style="flex:1; min-width:220px;">
+                    <h3 style="font-weight:700; color:#111827; margin-bottom:6px;">"Inscription"</h3>
+                    <ActionForm action=register>
+                        <input class="field" type="text" name="username" placeholder="username ([a-z0-9_])" />
+                        <input class="field" type="text" name="display_name" placeholder="nom affiché (optionnel)" />
+                        <input class="field" type="password" name="password" placeholder="mot de passe (min 8)" />
+                        <button type="submit" class="btn-post" style="margin-top:6px;">"Créer le compte"</button>
+                    </ActionForm>
+                    {move || match register.value().get() {
+                        Some(Ok(u)) => view! { <p class="form-msg-ok">"Compte créé : @"{u.username}</p> }.into_any(),
+                        Some(Err(e)) => view! { <p class="form-msg-err">"Échec : "{e.to_string()}</p> }.into_any(),
+                        None => ().into_any(),
+                    }}
+                </div>
+            </div>
+        </div>
 
-        <h2>"Inscription"</h2>
-        <ActionForm action=register>
-            <input type="text" name="username" placeholder="username ([a-z0-9_])" />
-            <input type="text" name="display_name" placeholder="nom affiché (optionnel)" />
-            <input type="password" name="password" placeholder="mot de passe (min 8)" />
-            <button type="submit">"Créer le compte"</button>
-        </ActionForm>
-        <p>
-            {move || match register.value().get() {
-                Some(Ok(u)) => format!("Compte créé et connecté : @{}", u.username),
-                Some(Err(e)) => format!("Échec : {e}"),
-                None => String::new(),
-            }}
-        </p>
+        // Composer
+        <div class="composer">
+            <div style="display:flex; gap:12px;">
+                <div class="avatar avatar-blue">{ic_pen()}</div>
+                <div style="flex:1;">
+                    <ActionForm action=create>
+                        <input type="text" name="content" placeholder="Partagez votre actu sport…" />
+                        <div style="display:flex; justify-content:flex-end; margin-top:8px;">
+                            <button type="submit" class="btn-post">"Post"</button>
+                        </div>
+                    </ActionForm>
+                </div>
+            </div>
+        </div>
 
-        <h2>"Nouveau post"</h2>
-        <ActionForm action=create>
-            <input type="text" name="content" placeholder="Quoi de neuf ?" />
-            <button type="submit">"Publier"</button>
-        </ActionForm>
-
-        <h2>"Fil"</h2>
-        <Suspense fallback=|| view! { <p>"Chargement du fil…"</p> }>
+        // Fil
+        <Suspense fallback=|| view! { <div class="empty-state">"Chargement du fil…"</div> }>
             {move || {
                 timeline
                     .get()
                     .map(|res| match res {
-                        Ok(items) => {
+                        Ok(items) if items.is_empty() => {
                             view! {
-                                <ul class="feed">
-                                    {items
-                                        .into_iter()
-                                        .map(|i| {
-                                            let id = i.id;
-                                            // Libellés selon l'état persistant renvoyé par le serveur.
-                                            let like_label = if i.liked_by_me { "❤ Liké" } else { "🤍 Liker" };
-                                            let repost_label = if i.reposted_by_me { "🔁 Reposté" } else { "🔁 Repost" };
-                                            let bm_label = if i.bookmarked_by_me { "🔖 Enregistré" } else { "🔖 Enregistrer" };
-                                            view! {
-                                                <li class="post">
-                                                    <strong>"@"{i.author_username}</strong>
-                                                    " · "
-                                                    <span>{i.content}</span>
-                                                    " — "
-                                                    <em>{i.likes_count}" ❤ · "{i.reposts_count}" 🔁"</em>
-                                                    " "
-                                                    <ActionForm action=like>
-                                                        <input type="hidden" name="id" value=id />
-                                                        <button type="submit">{like_label}</button>
-                                                    </ActionForm>
-                                                    <ActionForm action=repost>
-                                                        <input type="hidden" name="id" value=id />
-                                                        <button type="submit">{repost_label}</button>
-                                                    </ActionForm>
-                                                    <ActionForm action=bookmark>
-                                                        <input type="hidden" name="id" value=id />
-                                                        <button type="submit">{bm_label}</button>
-                                                    </ActionForm>
-                                                </li>
-                                            }
-                                        })
-                                        .collect_view()}
-                                </ul>
+                                <div class="empty-state">
+                                    {ic_feather()}
+                                    <h3 style="font-size:22px; font-weight:700; color:#111827; margin-bottom:6px;">"No posts yet"</h3>
+                                    <p>"Soyez le premier à partager quelque chose !"</p>
+                                </div>
                             }
                                 .into_any()
                         }
-                        Err(e) => view! { <p>"Erreur : " {e.to_string()}</p> }.into_any(),
+                        Ok(items) => {
+                            view! {
+                                <div>
+                                    {items
+                                        .into_iter()
+                                        .map(|i| tweet_card(i, like, repost, bookmark))
+                                        .collect_view()}
+                                </div>
+                            }
+                                .into_any()
+                        }
+                        Err(e) => view! { <div class="empty-state">"Erreur : "{e.to_string()}</div> }.into_any(),
                     })
             }}
         </Suspense>
+    }
+}
+
+/// Carte de post (tweet) — structure & actions fidèles au design Django.
+fn tweet_card(
+    i: FeedItemDto,
+    like: ServerAction<ToggleLike>,
+    repost: ServerAction<ToggleRepost>,
+    bookmark: ServerAction<ToggleBookmark>,
+) -> impl IntoView {
+    let id = i.id;
+    let href = format!("/post/{}", i.id);
+    let ini = initial(&i.author_username);
+    let like_class = if i.liked_by_me { "tweet-action action-btn liked" } else { "tweet-action action-btn" };
+    let repost_class = if i.reposted_by_me { "tweet-action action-btn retweeted" } else { "tweet-action action-btn" };
+    let bm_class = if i.bookmarked_by_me { "tweet-action action-btn bookmarked" } else { "tweet-action action-btn" };
+    let display = if i.author_display.is_empty() { i.author_username.clone() } else { i.author_display.clone() };
+
+    view! {
+        <article class="tweet-hover">
+            <div style="display:flex; gap:12px;">
+                <div class="avatar">{ini}</div>
+                <div style="flex:1; min-width:0;">
+                    <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+                        <A href=href.clone() attr:style="font-weight:700; color:#111827; text-decoration:none;">
+                            {display}
+                        </A>
+                        <span style="color:#6b7280;">"@"{i.author_username}</span>
+                        <span style="color:#6b7280;">"·"</span>
+                        <span style="color:#6b7280; font-size:13px;">{short_date(&i.created_at)}</span>
+                    </div>
+                    <A href=href attr:style="display:block; text-decoration:none;">
+                        <p style="color:#111827; margin-top:8px; line-height:1.5; word-break:break-word;">
+                            {i.content}
+                        </p>
+                    </A>
+                    <div style="display:flex; justify-content:space-between; max-width:28rem; margin-top:12px;">
+                        <A href=format!("/post/{id}") attr:class="tweet-action" attr:aria-label="Répondre">
+                            {ic_reply()}<span class="action-label">{i.replies_count}</span>
+                        </A>
+                        <ActionForm action=repost>
+                            <input type="hidden" name="id" value=id />
+                            <button type="submit" class=repost_class aria-label="Reposter">
+                                {ic_repeat()}<span class="action-label">{i.reposts_count}</span>
+                            </button>
+                        </ActionForm>
+                        <ActionForm action=like>
+                            <input type="hidden" name="id" value=id />
+                            <button type="submit" class=like_class aria-label="Aimer">
+                                {ic_heart()}<span class="action-label">{i.likes_count}</span>
+                            </button>
+                        </ActionForm>
+                        <ActionForm action=bookmark>
+                            <input type="hidden" name="id" value=id />
+                            <button type="submit" class=bm_class aria-label="Enregistrer">{ic_bookmark()}</button>
+                        </ActionForm>
+                        <span class="tweet-action" role="img" aria-label="Partager">{ic_share()}</span>
+                    </div>
+                </div>
+            </div>
+        </article>
     }
 }
 
@@ -216,48 +543,84 @@ fn PostDetail() -> impl IntoView {
     );
 
     view! {
-        <h1>"🏟️ GRIND — Post"</h1>
-        <Suspense fallback=|| view! { <p>"Chargement…"</p> }>
+        <div class="header-bar">
+            <A href="/" attr:class="tweet-action" attr:style="color:#dc2626;">
+                {ic_arrow_left()}<span>"Retour"</span>
+            </A>
+        </div>
+        <Suspense fallback=|| view! { <div class="empty-state">"Chargement…"</div> }>
             {move || {
                 post.get()
                     .map(|res| match res {
                         Ok((Some(p), replies)) => {
                             let parent_id = p.id;
+                            let ini = initial(&p.author_username);
+                            let display = if p.author_display.is_empty() { p.author_username.clone() } else { p.author_display.clone() };
                             view! {
-                                <article class="post-detail">
-                                    <h2>"@"{p.author_display.clone()}</h2>
-                                    <p>{p.content.clone()}</p>
-                                    <small>{p.likes_count}" ❤ · "{p.replies_count}" 💬"</small>
+                                <article style="padding:16px; border-bottom:1px solid #e5e7eb;">
+                                    <div style="display:flex; gap:12px; margin-bottom:12px;">
+                                        <div class="avatar">{ini}</div>
+                                        <div>
+                                            <div style="font-weight:700; color:#111827;">{display}</div>
+                                            <div style="color:#6b7280;">"@"{p.author_username.clone()}</div>
+                                        </div>
+                                    </div>
+                                    <p style="font-size:22px; font-weight:300; color:#111827; margin-bottom:16px;">
+                                        {p.content.clone()}
+                                    </p>
+                                    <div style="display:flex; gap:24px; border-top:1px solid #e5e7eb; border-bottom:1px solid #e5e7eb; padding:16px 0; color:#6b7280;">
+                                        <div><strong style="color:#111827;">{p.replies_count}</strong>" Réponses"</div>
+                                        <div><strong style="color:#111827;">{p.reposts_count}</strong>" Reposts"</div>
+                                        <div><strong style="color:#111827;">{p.likes_count}</strong>" Likes"</div>
+                                    </div>
                                 </article>
-                                <h3>"Répondre"</h3>
-                                <ActionForm action=reply>
-                                    <input type="hidden" name="parent_id" value=parent_id />
-                                    <input type="text" name="content" placeholder="Votre réponse…" />
-                                    <button type="submit">"Répondre"</button>
-                                </ActionForm>
-                                <p>
+                                <div class="composer">
+                                    <ActionForm action=reply>
+                                        <input type="hidden" name="parent_id" value=parent_id />
+                                        <input type="text" name="content" placeholder="Postez votre réponse…" />
+                                        <div style="display:flex; justify-content:flex-end; margin-top:8px;">
+                                            <button type="submit" class="btn-post">"Répondre"</button>
+                                        </div>
+                                    </ActionForm>
                                     {move || match reply.value().get() {
-                                        Some(Ok(_)) => "Réponse publiée.".to_string(),
-                                        Some(Err(e)) => format!("Échec : {e}"),
-                                        None => String::new(),
+                                        Some(Ok(_)) => view! { <p class="form-msg-ok">"Réponse publiée."</p> }.into_any(),
+                                        Some(Err(e)) => view! { <p class="form-msg-err">"Échec : "{e.to_string()}</p> }.into_any(),
+                                        None => ().into_any(),
                                     }}
-                                </p>
-                                <h3>"Réponses"</h3>
-                                <ul class="thread">
-                                    {replies
-                                        .into_iter()
-                                        .map(|r| {
-                                            view! {
-                                                <li><strong>"@"{r.author_username}</strong>" "{r.content}</li>
-                                            }
-                                        })
-                                        .collect_view()}
-                                </ul>
+                                </div>
+                                <div>
+                                    {if replies.is_empty() {
+                                        view! { <div class="empty-state">"Aucune réponse pour l'instant. Soyez le premier !"</div> }.into_any()
+                                    } else {
+                                        replies
+                                            .into_iter()
+                                            .map(|r| {
+                                                let ri = initial(&r.author_username);
+                                                let rd = if r.author_display.is_empty() { r.author_username.clone() } else { r.author_display.clone() };
+                                                view! {
+                                                    <article class="tweet-hover">
+                                                        <div style="display:flex; gap:12px;">
+                                                            <div class="avatar avatar-amber">{ri}</div>
+                                                            <div style="flex:1; min-width:0;">
+                                                                <div style="display:flex; align-items:center; gap:6px;">
+                                                                    <span style="font-weight:700; color:#111827;">{rd}</span>
+                                                                    <span style="color:#6b7280;">"@"{r.author_username}</span>
+                                                                </div>
+                                                                <p style="color:#111827; margin-top:6px;">{r.content}</p>
+                                                            </div>
+                                                        </div>
+                                                    </article>
+                                                }
+                                            })
+                                            .collect_view()
+                                            .into_any()
+                                    }}
+                                </div>
                             }
                                 .into_any()
                         }
-                        Ok((None, _)) => view! { <p>"Post introuvable."</p> }.into_any(),
-                        Err(e) => view! { <p>"Erreur : " {e.to_string()}</p> }.into_any(),
+                        Ok((None, _)) => view! { <div class="empty-state">"Post introuvable."</div> }.into_any(),
+                        Err(e) => view! { <div class="empty-state">"Erreur : "{e.to_string()}</div> }.into_any(),
                     })
             }}
         </Suspense>
@@ -269,42 +632,66 @@ fn Profile() -> impl IntoView {
     let params = use_params_map();
     let username = move || params.read().get("username").unwrap_or_default();
     let follow = ServerAction::<ToggleFollow>::new();
-    // Le profil se recharge après chaque (dé)suivi (source = username + version).
     let profile = Resource::new(
         move || (username(), follow.version().get()),
         |(name, _)| async move { get_profile(name).await },
     );
 
     view! {
-        <h1>"👤 @"{username}</h1>
-        <Suspense fallback=|| view! { <p>"Chargement…"</p> }>
+        <div class="header-bar">
+            <h2 class="header-title">"@"{username}</h2>
+        </div>
+        <Suspense fallback=|| view! { <div class="empty-state">"Chargement…"</div> }>
             {move || {
                 profile
                     .get()
                     .map(|res| match res {
                         Ok(p) => {
+                            let ini = initial(&p.username);
+                            let uname = p.username.clone();
                             let follow_btn = p.can_follow.then(|| {
                                 let label = if p.is_following { "Ne plus suivre" } else { "Suivre" };
-                                let uname = p.username.clone();
+                                let u = p.username.clone();
                                 view! {
                                     <ActionForm action=follow>
-                                        <input type="hidden" name="username" value=uname />
-                                        <button type="submit">{label}</button>
+                                        <input type="hidden" name="username" value=u />
+                                        <button type="submit" class="btn-post">{label}</button>
                                     </ActionForm>
                                 }
                             });
                             view! {
-                                <div class="profile-header">{follow_btn}</div>
-                                <ul class="feed">
-                                    {p.posts
-                                        .into_iter()
-                                        .map(|i| view! { <li>{i.content}" — "{i.likes_count}" ❤"</li> })
-                                        .collect_view()}
-                                </ul>
+                                <div style="padding:16px; border-bottom:1px solid #e5e7eb; display:flex; gap:16px; align-items:center;">
+                                    <div class="avatar" style="width:64px; height:64px; font-size:24px;">{ini}</div>
+                                    <div style="flex:1;">
+                                        <div style="font-weight:800; font-size:20px; color:#111827;">"@"{uname}</div>
+                                    </div>
+                                    {follow_btn}
+                                </div>
+                                <div>
+                                    {if p.posts.is_empty() {
+                                        view! { <div class="empty-state">"Aucun post."</div> }.into_any()
+                                    } else {
+                                        p.posts
+                                            .into_iter()
+                                            .map(|i| {
+                                                let href = format!("/post/{}", i.id);
+                                                view! {
+                                                    <A href=href attr:class="tweet-hover" attr:style="display:block; text-decoration:none;">
+                                                        <p style="color:#111827;">{i.content}</p>
+                                                        <div style="color:#6b7280; font-size:13px; margin-top:6px;">
+                                                            {i.likes_count}" ❤ · "{i.replies_count}" 💬"
+                                                        </div>
+                                                    </A>
+                                                }
+                                            })
+                                            .collect_view()
+                                            .into_any()
+                                    }}
+                                </div>
                             }
                                 .into_any()
                         }
-                        Err(e) => view! { <p>"Erreur : " {e.to_string()}</p> }.into_any(),
+                        Err(e) => view! { <div class="empty-state">"Erreur : "{e.to_string()}</div> }.into_any(),
                     })
             }}
         </Suspense>
@@ -317,41 +704,44 @@ fn Admin() -> impl IntoView {
     let list = Resource::new(move || del.version().get(), |_| admin_list_posts());
 
     view! {
-        <h1>"🛠️ Admin — modération"</h1>
-        <p>
-            {move || match del.value().get() {
-                Some(Ok(())) => "Post supprimé.".to_string(),
-                Some(Err(e)) => format!("Erreur : {e}"),
-                None => String::new(),
-            }}
-        </p>
-        <Suspense fallback=|| view! { <p>"Chargement…"</p> }>
+        <div class="header-bar">
+            <h2 class="header-title">{ic_shield()}" Admin — modération"</h2>
+        </div>
+        {move || match del.value().get() {
+            Some(Ok(())) => view! { <p class="form-msg-ok" style="padding:8px 16px;">"Post supprimé."</p> }.into_any(),
+            Some(Err(e)) => view! { <p class="form-msg-err" style="padding:8px 16px;">"Erreur : "{e.to_string()}</p> }.into_any(),
+            None => ().into_any(),
+        }}
+        <Suspense fallback=|| view! { <div class="empty-state">"Chargement…"</div> }>
             {move || {
                 list.get()
                     .map(|res| match res {
                         Ok(items) => {
                             view! {
-                                <ul class="feed">
+                                <div>
                                     {items
                                         .into_iter()
                                         .map(|i| {
                                             let id = i.id;
                                             view! {
-                                                <li>
-                                                    "#"{i.id}" @"{i.author_username}" : "{i.content}" "
+                                                <div class="tweet-hover" style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
+                                                    <div>
+                                                        <span style="color:#6b7280;">"#"{i.id}" @"{i.author_username}" : "</span>
+                                                        <span style="color:#111827;">{i.content}</span>
+                                                    </div>
                                                     <ActionForm action=del>
                                                         <input type="hidden" name="id" value=id />
-                                                        <button type="submit">"Supprimer"</button>
+                                                        <button type="submit" class="tweet-action" style="color:#dc2626;">"Supprimer"</button>
                                                     </ActionForm>
-                                                </li>
+                                                </div>
                                             }
                                         })
                                         .collect_view()}
-                                </ul>
+                                </div>
                             }
                                 .into_any()
                         }
-                        Err(e) => view! { <p>"Erreur : " {e.to_string()}</p> }.into_any(),
+                        Err(e) => view! { <div class="empty-state">"Erreur (staff requis) : "{e.to_string()}</div> }.into_any(),
                     })
             }}
         </Suspense>
@@ -362,43 +752,52 @@ fn Admin() -> impl IntoView {
 fn Sports() -> impl IntoView {
     let catalog = Resource::new(|| (), |_| get_catalog());
     view! {
-        <h1>"🏟️ Sports"</h1>
-        <Suspense fallback=|| view! { <p>"Chargement…"</p> }>
+        <div class="header-bar">
+            <h2 class="header-title">{ic_trophy()}" Sports"</h2>
+        </div>
+        <Suspense fallback=|| view! { <div class="empty-state">"Chargement…"</div> }>
             {move || {
                 catalog
                     .get()
                     .map(|res| match res {
                         Ok(c) => {
                             view! {
-                                <h2>"Équipes"</h2>
-                                <ul>
-                                    {c.teams
-                                        .into_iter()
-                                        .map(|t| {
-                                            let href = format!("/team/{}", t.slug);
-                                            view! { <li><A href=href>{t.name}</A>" ("{t.country}")"</li> }
-                                        })
-                                        .collect_view()}
-                                </ul>
-                                <h2>"Matchs"</h2>
-                                <ul>
-                                    {c.matches
-                                        .into_iter()
-                                        .map(|m| {
-                                            let href = format!("/match/{}", m.id);
-                                            view! {
-                                                <li>
-                                                    <A href=href>{m.home_team}" vs "{m.away_team}</A>
-                                                    " — "{m.status}
-                                                </li>
-                                            }
-                                        })
-                                        .collect_view()}
-                                </ul>
+                                <div style="padding:16px;">
+                                    <h3 style="font-weight:700; color:#111827; margin-bottom:8px;">"Équipes"</h3>
+                                    <div>
+                                        {c.teams
+                                            .into_iter()
+                                            .map(|t| {
+                                                let href = format!("/team/{}", t.slug);
+                                                view! {
+                                                    <A href=href attr:class="trending-item">
+                                                        <div class="trending-title">{t.name}</div>
+                                                        <div class="trending-subtitle">{t.country}</div>
+                                                    </A>
+                                                }
+                                            })
+                                            .collect_view()}
+                                    </div>
+                                    <h3 style="font-weight:700; color:#111827; margin:16px 0 8px;">"Matchs"</h3>
+                                    <div>
+                                        {c.matches
+                                            .into_iter()
+                                            .map(|m| {
+                                                let href = format!("/match/{}", m.id);
+                                                view! {
+                                                    <A href=href attr:class="trending-item">
+                                                        <div class="trending-title">{m.home_team}" vs "{m.away_team}</div>
+                                                        <div class="trending-subtitle">{m.status}</div>
+                                                    </A>
+                                                }
+                                            })
+                                            .collect_view()}
+                                    </div>
+                                </div>
                             }
                                 .into_any()
                         }
-                        Err(e) => view! { <p>"Erreur : " {e.to_string()}</p> }.into_any(),
+                        Err(e) => view! { <div class="empty-state">"Erreur : "{e.to_string()}</div> }.into_any(),
                     })
             }}
         </Suspense>
@@ -415,7 +814,7 @@ fn Team() -> impl IntoView {
         |(s, _)| async move { get_team(s).await },
     );
     view! {
-        <Suspense fallback=|| view! { <p>"Chargement…"</p> }>
+        <Suspense fallback=|| view! { <div class="empty-state">"Chargement…"</div> }>
             {move || {
                 team.get()
                     .map(|res| match res {
@@ -426,19 +825,23 @@ fn Team() -> impl IntoView {
                                 view! {
                                     <ActionForm action=follow>
                                         <input type="hidden" name="slug" value=slug />
-                                        <button type="submit">{label}</button>
+                                        <button type="submit" class="btn-post">{label}</button>
                                     </ActionForm>
                                 }
                             });
                             view! {
-                                <h1>"⚽ "{p.team.name.clone()}</h1>
-                                <p>"Pays : "{p.team.country.clone()}</p>
-                                <div>{follow_btn}</div>
+                                <div class="header-bar">
+                                    <h2 class="header-title">{ic_trophy()}" "{p.team.name.clone()}</h2>
+                                </div>
+                                <div style="padding:16px;">
+                                    <p style="color:#6b7280; margin-bottom:12px;">"Pays : "{p.team.country.clone()}</p>
+                                    {follow_btn}
+                                </div>
                             }
                                 .into_any()
                         }
-                        Ok(None) => view! { <p>"Équipe introuvable."</p> }.into_any(),
-                        Err(e) => view! { <p>"Erreur : " {e.to_string()}</p> }.into_any(),
+                        Ok(None) => view! { <div class="empty-state">"Équipe introuvable."</div> }.into_any(),
+                        Err(e) => view! { <div class="empty-state">"Erreur : "{e.to_string()}</div> }.into_any(),
                     })
             }}
         </Suspense>
@@ -460,7 +863,7 @@ fn MatchPage() -> impl IntoView {
         },
     );
     view! {
-        <Suspense fallback=|| view! { <p>"Chargement…"</p> }>
+        <Suspense fallback=|| view! { <div class="empty-state">"Chargement…"</div> }>
             {move || {
                 game.get()
                     .map(|res| match res {
@@ -471,26 +874,45 @@ fn MatchPage() -> impl IntoView {
                                 _ => "—".to_string(),
                             };
                             view! {
-                                <h1>{p.game.home_team.clone()}" vs "{p.game.away_team.clone()}</h1>
-                                <p>"Score : "{score}" · "{p.game.status.clone()}</p>
-                                <h3>"Poster sur ce match"</h3>
-                                <ActionForm action=post>
-                                    <input type="hidden" name="match_id" value=id />
-                                    <input type="text" name="content" placeholder="Votre réaction live…" />
-                                    <button type="submit">"Publier"</button>
-                                </ActionForm>
-                                <h3>"Fil du match"</h3>
-                                <ul class="feed">
+                                <div class="header-bar">
+                                    <h2 class="header-title">{p.game.home_team.clone()}" vs "{p.game.away_team.clone()}</h2>
+                                </div>
+                                <div style="padding:16px;">
+                                    <p style="color:#6b7280; margin-bottom:12px;">"Score : "{score}" · "{p.game.status.clone()}</p>
+                                    <div class="composer" style="padding:0 0 16px; border:none;">
+                                        <ActionForm action=post>
+                                            <input type="hidden" name="match_id" value=id />
+                                            <input type="text" name="content" placeholder="Votre réaction live…" />
+                                            <div style="display:flex; justify-content:flex-end; margin-top:8px;">
+                                                <button type="submit" class="btn-post">"Publier"</button>
+                                            </div>
+                                        </ActionForm>
+                                    </div>
+                                </div>
+                                <div>
                                     {p.posts
                                         .into_iter()
-                                        .map(|i| view! { <li><strong>"@"{i.author_username}</strong>" "{i.content}</li> })
+                                        .map(|i| {
+                                            let ini = initial(&i.author_username);
+                                            view! {
+                                                <article class="tweet-hover">
+                                                    <div style="display:flex; gap:12px;">
+                                                        <div class="avatar">{ini}</div>
+                                                        <div>
+                                                            <span style="font-weight:700; color:#111827;">"@"{i.author_username}</span>
+                                                            <p style="color:#111827; margin-top:4px;">{i.content}</p>
+                                                        </div>
+                                                    </div>
+                                                </article>
+                                            }
+                                        })
                                         .collect_view()}
-                                </ul>
+                                </div>
                             }
                                 .into_any()
                         }
-                        Ok(None) => view! { <p>"Match introuvable."</p> }.into_any(),
-                        Err(e) => view! { <p>"Erreur : " {e.to_string()}</p> }.into_any(),
+                        Ok(None) => view! { <div class="empty-state">"Match introuvable."</div> }.into_any(),
+                        Err(e) => view! { <div class="empty-state">"Erreur : "{e.to_string()}</div> }.into_any(),
                     })
             }}
         </Suspense>
@@ -501,23 +923,35 @@ fn MatchPage() -> impl IntoView {
 fn Trending() -> impl IntoView {
     let tags = Resource::new(|| (), |_| get_trending());
     view! {
-        <h1>"🔥 Trending"</h1>
-        <Suspense fallback=|| view! { <p>"Chargement…"</p> }>
+        <div class="header-bar">
+            <h2 class="header-title">{ic_fire()}" Trending"</h2>
+        </div>
+        <Suspense fallback=|| view! { <div class="empty-state">"Chargement…"</div> }>
             {move || {
                 tags.get()
                     .map(|res| match res {
+                        Ok(list) if list.is_empty() => {
+                            view! { <div class="empty-state">"Aucun hashtag tendance pour l'instant."</div> }.into_any()
+                        }
                         Ok(list) => {
                             view! {
-                                <ul class="trending">
+                                <div style="padding:16px;">
                                     {list
                                         .into_iter()
-                                        .map(|h| view! { <li>"#"{h.slug}" — "{h.posts_count}" posts"</li> })
+                                        .map(|h| {
+                                            view! {
+                                                <div class="trending-item">
+                                                    <div class="trending-title" style="color:#dc2626;">"#"{h.slug}</div>
+                                                    <div class="trending-subtitle">{h.posts_count}" posts"</div>
+                                                </div>
+                                            }
+                                        })
                                         .collect_view()}
-                                </ul>
+                                </div>
                             }
                                 .into_any()
                         }
-                        Err(e) => view! { <p>"Erreur : " {e.to_string()}</p> }.into_any(),
+                        Err(e) => view! { <div class="empty-state">"Erreur : "{e.to_string()}</div> }.into_any(),
                     })
             }}
         </Suspense>
@@ -528,32 +962,41 @@ fn Trending() -> impl IntoView {
 fn Messages() -> impl IntoView {
     let convs = Resource::new(|| (), |_| get_conversations());
     view! {
-        <h1>"✉️ Messages"</h1>
-        <Suspense fallback=|| view! { <p>"Chargement…"</p> }>
+        <div class="header-bar">
+            <h2 class="header-title">{ic_mail()}" Messages"</h2>
+        </div>
+        <Suspense fallback=|| view! { <div class="empty-state">"Chargement…"</div> }>
             {move || {
                 convs
                     .get()
                     .map(|res| match res {
+                        Ok(list) if list.is_empty() => {
+                            view! { <div class="empty-state">"Aucune conversation."</div> }.into_any()
+                        }
                         Ok(list) => {
                             view! {
-                                <ul class="conversations">
+                                <div>
                                     {list
                                         .into_iter()
                                         .map(|c| {
                                             let href = format!("/messages/{}", c.other_username);
+                                            let ini = initial(&c.other_username);
                                             view! {
-                                                <li>
-                                                    <A href=href>"@"{c.other_username}</A>
-                                                    " — "{c.last_body}
-                                                </li>
+                                                <A href=href attr:class="tweet-hover" attr:style="display:flex; gap:12px; text-decoration:none;">
+                                                    <div class="avatar">{ini}</div>
+                                                    <div style="flex:1; min-width:0;">
+                                                        <div style="font-weight:700; color:#111827;">"@"{c.other_username}</div>
+                                                        <div style="color:#6b7280; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{c.last_body}</div>
+                                                    </div>
+                                                </A>
                                             }
                                         })
                                         .collect_view()}
-                                </ul>
+                                </div>
                             }
                                 .into_any()
                         }
-                        Err(e) => view! { <p>"Erreur (connectez-vous) : " {e.to_string()}</p> }.into_any(),
+                        Err(e) => view! { <div class="empty-state">"Connectez-vous pour voir vos messages. ("{e.to_string()}")"</div> }.into_any(),
                     })
             }}
         </Suspense>
@@ -570,36 +1013,50 @@ fn Thread() -> impl IntoView {
         |(name, _)| async move { get_thread(name).await },
     );
     view! {
-        <h1>"✉️ Conversation avec @"{username}</h1>
-        <ActionForm action=send>
-            <input type="hidden" name="recipient" value=username />
-            <input type="text" name="body" placeholder="Votre message…" />
-            <button type="submit">"Envoyer"</button>
-        </ActionForm>
-        <p>
+        <div class="header-bar">
+            <h2 class="header-title">"Conversation avec @"{username}</h2>
+        </div>
+        <div class="composer">
+            <ActionForm action=send>
+                <input type="hidden" name="recipient" value=username />
+                <input type="text" name="body" placeholder="Votre message…" />
+                <div style="display:flex; justify-content:flex-end; margin-top:8px;">
+                    <button type="submit" class="btn-post">"Envoyer"</button>
+                </div>
+            </ActionForm>
             {move || match send.value().get() {
-                Some(Ok(())) => String::new(),
-                Some(Err(e)) => format!("Échec : {e}"),
-                None => String::new(),
+                Some(Err(e)) => view! { <p class="form-msg-err">"Échec : "{e.to_string()}</p> }.into_any(),
+                _ => ().into_any(),
             }}
-        </p>
-        <Suspense fallback=|| view! { <p>"Chargement…"</p> }>
+        </div>
+        <Suspense fallback=|| view! { <div class="empty-state">"Chargement…"</div> }>
             {move || {
                 thread
                     .get()
                     .map(|res| match res {
                         Ok(msgs) => {
                             view! {
-                                <ul class="thread">
+                                <div>
                                     {msgs
                                         .into_iter()
-                                        .map(|m| view! { <li><strong>"@"{m.sender_username}</strong>" : "{m.body}</li> })
+                                        .map(|m| {
+                                            let ini = initial(&m.sender_username);
+                                            view! {
+                                                <div class="tweet-hover" style="display:flex; gap:12px;">
+                                                    <div class="avatar" style="width:36px; height:36px; font-size:14px;">{ini}</div>
+                                                    <div>
+                                                        <span style="font-weight:700; color:#111827;">"@"{m.sender_username}</span>
+                                                        <p style="color:#111827; margin-top:2px;">{m.body}</p>
+                                                    </div>
+                                                </div>
+                                            }
+                                        })
                                         .collect_view()}
-                                </ul>
+                                </div>
                             }
                                 .into_any()
                         }
-                        Err(e) => view! { <p>"Erreur (connectez-vous) : " {e.to_string()}</p> }.into_any(),
+                        Err(e) => view! { <div class="empty-state">"Connectez-vous. ("{e.to_string()}")"</div> }.into_any(),
                     })
             }}
         </Suspense>
@@ -611,33 +1068,43 @@ fn Notifications() -> impl IntoView {
     let mark = ServerAction::<MarkNotificationsRead>::new();
     let list = Resource::new(move || mark.version().get(), |_| get_notifications());
     view! {
-        <h1>"🔔 Notifications"</h1>
-        <ActionForm action=mark>
-            <button type="submit">"Tout marquer comme lu"</button>
-        </ActionForm>
-        <Suspense fallback=|| view! { <p>"Chargement…"</p> }>
+        <div class="header-bar" style="display:flex; justify-content:space-between; align-items:center;">
+            <h2 class="header-title">{ic_bell()}" Notifications"</h2>
+            <ActionForm action=mark>
+                <button type="submit" class="tweet-action" style="color:#dc2626;">"Tout marquer comme lu"</button>
+            </ActionForm>
+        </div>
+        <Suspense fallback=|| view! { <div class="empty-state">"Chargement…"</div> }>
             {move || {
                 list.get()
                     .map(|res| match res {
+                        Ok(items) if items.is_empty() => {
+                            view! { <div class="empty-state">{ic_bell()}<p>"Aucune notification."</p></div> }.into_any()
+                        }
                         Ok(items) => {
                             view! {
-                                <ul class="notifications">
+                                <div>
                                     {items
                                         .into_iter()
                                         .map(|n| {
-                                            let read = if n.is_read { "lu" } else { "non lu" };
+                                            let ini = initial(&n.actor_username);
+                                            let bg = if n.is_read { "#ffffff" } else { "#fef2f2" };
                                             view! {
-                                                <li>
-                                                    "@"{n.actor_username}" — "{n.kind}" ("{read}")"
-                                                </li>
+                                                <div class="tweet-hover" style=format!("display:flex; gap:12px; align-items:center; background:{bg};")>
+                                                    <div class="avatar avatar-red" style="width:36px; height:36px; font-size:14px;">{ini}</div>
+                                                    <div>
+                                                        <span style="font-weight:700; color:#111827;">"@"{n.actor_username}</span>
+                                                        <span style="color:#6b7280;">" — "{n.kind}</span>
+                                                    </div>
+                                                </div>
                                             }
                                         })
                                         .collect_view()}
-                                </ul>
+                                </div>
                             }
                                 .into_any()
                         }
-                        Err(e) => view! { <p>"Erreur (connectez-vous) : " {e.to_string()}</p> }.into_any(),
+                        Err(e) => view! { <div class="empty-state">"Connectez-vous. ("{e.to_string()}")"</div> }.into_any(),
                     })
             }}
         </Suspense>
@@ -1244,11 +1711,13 @@ pub async fn get_trending() -> Result<Vec<HashtagDto>, ServerFnError> {
     // 1. Tentative de lecture cache (best-effort).
     if let Some(cached) = state.cache.get(CACHE_KEY).await {
         if let Ok(dtos) = serde_json::from_str::<Vec<HashtagDto>>(&cached) {
+            set_x_cache("HIT"); // servi depuis Redis, sans toucher la BDD
             return Ok(dtos);
         }
     }
 
     // 2. Cache manquant/invalide → source de vérité (BDD).
+    set_x_cache("MISS"); // calcul complet (agrégation hashtags en BDD)
     let dtos: Vec<HashtagDto> = state
         .hashtags
         .trending(20)
@@ -1263,6 +1732,17 @@ pub async fn get_trending() -> Result<Vec<HashtagDto>, ServerFnError> {
         state.cache.set(CACHE_KEY, &json, TTL_SECS).await;
     }
     Ok(dtos)
+}
+
+/// Pose l'en-tête `X-Cache: HIT|MISS` sur la réponse (preuve du cache applicatif).
+#[cfg(feature = "ssr")]
+fn set_x_cache(status: &'static str) {
+    if let Some(resp) = use_context::<leptos_axum::ResponseOptions>() {
+        resp.insert_header(
+            axum::http::HeaderName::from_static("x-cache"),
+            axum::http::HeaderValue::from_static(status),
+        );
+    }
 }
 
 /// Point d'entrée d'hydratation côté client (WASM).

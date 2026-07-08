@@ -1,0 +1,9 @@
+=== COVERAGE (onglet Coverage — code chargé mais non utilisé) ===
+JS  : 25.7 Ko chargés · 12.6 Ko non utilisés (49.1%)
+CSS : 19.6 Ko chargés · 7.6 Ko non utilisés (38.9%)
+  (Note: le CSS est déjà purgé par Tailwind ; le JS est la glue d'hydratation.)
+
+=== ACCESSIBILITÉ (axe-core, règles WCAG 2.0 A + AA) ===
+Violations : 0
+  Aucune violation ✅
+Règles passées : 22

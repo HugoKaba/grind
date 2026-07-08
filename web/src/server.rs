@@ -3,8 +3,9 @@
 
 use axum::body::Body;
 use axum::extract::{FromRef, State};
-use axum::http::Request;
-use axum::response::IntoResponse;
+use axum::http::header::{CACHE_CONTROL, COOKIE};
+use axum::http::{HeaderValue, Method, Request};
+use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use axum::Router;
 use leptos::config::LeptosOptions;
@@ -12,6 +13,7 @@ use leptos::prelude::*;
 use leptos_axum::{
     file_and_error_handler, generate_route_list, handle_server_fns_with_context, LeptosRoutes,
 };
+use tower_http::compression::CompressionLayer;
 
 use crate::state::DomainState;
 use crate::{shell, App};
@@ -38,6 +40,63 @@ async fn server_fns(State(domain): State<DomainState>, req: Request<Body>) -> im
     handle_server_fns_with_context(move || provide_context(domain.clone()), req).await
 }
 
+/// Chemins de **lecture publique** cacheables par un cache partagé (CDN/proxy).
+/// Anonymes et non personnalisés → un HIT y est légitime et souhaitable.
+fn is_public_read_path(path: &str) -> bool {
+    matches!(
+        path,
+        "/" | "/trending"
+            | "/sports"
+            | "/api/get_timeline"
+            | "/api/get_trending"
+            | "/api/get_catalog"
+    )
+}
+
+/// Middleware **stratégie de cache** (écoconception — palier 1M / RGESN hébergement).
+///
+/// Décide du `Cache-Control` selon la nature de la réponse :
+/// - assets versionnés `/pkg/*` → `public, immutable` (cache long, HIT quasi permanent) ;
+/// - lecture publique anonyme (GET sans cookie de session) → `public, s-maxage`
+///   → un cache partagé peut répondre en **HIT** ;
+/// - toute requête portant un cookie de session (données potentiellement
+///   personnalisées / privées) → `private, no-store` → le cache partagé doit
+///   **PASS/MISS** (jamais servir la donnée d'un autre utilisateur : sécurité).
+async fn cache_control_layer(req: Request<Body>, next: axum::middleware::Next) -> Response {
+    let path = req.uri().path().to_owned();
+    // GET et HEAD sont des méthodes sûres et cacheables par un cache partagé.
+    let is_safe = matches!(*req.method(), Method::GET | Method::HEAD);
+    let has_session = req
+        .headers()
+        .get(COOKIE)
+        .and_then(|c| c.to_str().ok())
+        .map(|c| c.contains("session="))
+        .unwrap_or(false);
+
+    let mut res = next.run(req).await;
+
+    // Note : Leptos pose `private, no-store` par défaut sur les réponses SSR.
+    // Notre stratégie de cache est **autoritaire** : on (ré)écrit le Cache-Control
+    // selon la nature publique/privée de la requête (le `insert` remplace).
+    let value = if path.starts_with("/pkg/") {
+        // Bundle WASM/JS/CSS : sûr à cacher longtemps (rebuild = nouveau contenu servi).
+        "public, max-age=31536000, immutable"
+    } else if has_session {
+        // Session présente → réponse potentiellement privée → jamais en cache partagé.
+        "private, no-store"
+    } else if is_safe && is_public_read_path(&path) {
+        // Lecture publique anonyme → cacheable par un cache partagé/CDN (HIT).
+        "public, max-age=60, s-maxage=60, stale-while-revalidate=30"
+    } else {
+        // Par défaut (mutations, endpoints privés) → pas de cache partagé.
+        "private, no-store"
+    };
+
+    res.headers_mut()
+        .insert(CACHE_CONTROL, HeaderValue::from_static(value));
+    res
+}
+
 /// Routeur complet : server functions (`/api`) + routes Leptos (SSR + hydratation).
 pub fn build_router(app_state: AppState) -> Router {
     let leptos_options = app_state.leptos_options.clone();
@@ -57,6 +116,12 @@ pub fn build_router(app_state: AppState) -> Router {
             },
         )
         .fallback(file_and_error_handler::<AppState, _>(shell))
+        // Stratégie de cache Public (HIT) vs Private (PASS/MISS) — palier 1M.
+        .layer(axum::middleware::from_fn(cache_control_layer))
+        // Compression brotli/gzip négociée via Accept-Encoding : réduit le poids
+        // réseau de tous les assets (WASM ~1,3 Mo -> ~288 Ko brotli), HTML et JS.
+        // Écoconception : moins d'octets transférés = moins de bande passante/énergie.
+        .layer(CompressionLayer::new())
         .with_state(app_state)
 }
 

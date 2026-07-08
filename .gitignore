@@ -29,3 +29,11 @@ Thumbs.db
 .venv/
 __pycache__/
 *.py[cod]
+
+# --- Divers local ---
+dump.rdb
+.claude/settings.local.json
+
+# --- Rapport écoconception : gardé privé (non versionné) ---
+/ecoconception/RAPPORT-OPTIMISATION-RUST.md
+/ecoconception/RAPPORT-OPTIMISATION-RUST.pdf
