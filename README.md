@@ -81,20 +81,28 @@ Routes SSR + hydratées : `/` (fil), `/post/:id` (détail + thread), `/u/:userna
 
 ## Démarrage rapide (de A à Z)
 
+### Option 1 — Docker (le plus simple : ne demande QUE Docker)
+
 ```sh
-# 1. Prérequis (une fois)
+cp .env.example .env         # optionnel : valeurs par défaut OK pour une démo
+docker compose up --build    # → http://localhost:3000  (app + Postgres + Redis)
+```
+
+### Option 2 — Local sans Docker (dev)
+
+```sh
+# 1. Installer Rust (si pas déjà fait) — voir https://rustup.rs
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+source "$HOME/.cargo/env"
+
+# 2. Outils du projet (une fois)
 rustup target add wasm32-unknown-unknown
 cargo install cargo-leptos --locked --version ^0.3   # embarque le wasm-bindgen aligné
-brew install binaryen                                # wasm-opt (optim WASM)
+# wasm-opt (optim WASM) : macOS → `brew install binaryen` · Debian/Ubuntu → `sudo apt install binaryen`
 
-# 2. Config
-cp .env.example .env        # adapter si besoin (sinon SQLite en mémoire + cache désactivé)
-
-# 3a. Lancer SANS Docker (dev rapide, SQLite en mémoire)
-cargo leptos serve          # http://127.0.0.1:3000
-
-# 3b. …OU avec Docker (Postgres + Redis)
-docker compose up --build   # http://localhost:3000
+# 3. Config + lancement (SQLite en mémoire, cache désactivé si pas de Redis)
+cp .env.example .env
+cargo leptos serve           # depuis la racine du repo → http://127.0.0.1:3000
 ```
 
 Comptes de démo (seedés au 1er démarrage) : **`messi`** (staff) ou **`ronaldo`**, mot de passe **`grind1234`**.
