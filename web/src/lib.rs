@@ -1229,18 +1229,36 @@ pub async fn mark_notifications_read() -> Result<(), ServerFnError> {
 
 /// Server function : hashtags trending (public). Extraits automatiquement à la
 /// création des posts depuis `PostContent::hashtags()`.
+/// **Mis en cache (Redis, TTL 30s)** : lecture chaude servie sans toucher la BDD.
 #[server(endpoint = "get_trending")]
 pub async fn get_trending() -> Result<Vec<HashtagDto>, ServerFnError> {
+    const CACHE_KEY: &str = "trending:v1";
+    const TTL_SECS: u64 = 30;
+
     let state = domain_state()?;
-    let rows = state
+
+    // 1. Tentative de lecture cache (best-effort).
+    if let Some(cached) = state.cache.get(CACHE_KEY).await {
+        if let Ok(dtos) = serde_json::from_str::<Vec<HashtagDto>>(&cached) {
+            return Ok(dtos);
+        }
+    }
+
+    // 2. Cache manquant/invalide → source de vérité (BDD).
+    let dtos: Vec<HashtagDto> = state
         .hashtags
         .trending(20)
         .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?;
-    Ok(rows
+        .map_err(|e| ServerFnError::new(e.to_string()))?
         .into_iter()
         .map(|h| HashtagDto { slug: h.slug, posts_count: h.posts_count })
-        .collect())
+        .collect();
+
+    // 3. Réchauffe le cache pour les prochaines lectures (silencieux si échec).
+    if let Ok(json) = serde_json::to_string(&dtos) {
+        state.cache.set(CACHE_KEY, &json, TTL_SECS).await;
+    }
+    Ok(dtos)
 }
 
 /// Point d'entrée d'hydratation côté client (WASM).

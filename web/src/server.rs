@@ -94,7 +94,8 @@ mod tests {
                 .await
                 .unwrap();
         }
-        api_router(DomainState::new(db, "test-secret".to_owned()))
+        let cache = std::sync::Arc::new(grind_infrastructure::cache::NoopCache);
+        api_router(DomainState::new(db, cache, "test-secret".to_owned()))
     }
 
     fn form(uri: &str, cookie: Option<&str>, body: &str) -> Request<Body> {

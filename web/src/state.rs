@@ -4,7 +4,7 @@
 use std::sync::Arc;
 
 use grind_application::{
-    BookmarkRepository, FeedRepository, FollowRepository, HashtagRepository, LikeRepository,
+    BookmarkRepository, Cache, FeedRepository, FollowRepository, HashtagRepository, LikeRepository,
     MatchRepository, MessageRepository, NotificationRepository, PasswordHasher, PostRepository,
     RepostRepository, SportCatalog, TeamFollowRepository, UserRepository,
 };
@@ -30,13 +30,15 @@ pub struct DomainState {
     pub messages: Arc<dyn MessageRepository>,
     pub notifications: Arc<dyn NotificationRepository>,
     pub hashtags: Arc<dyn HashtagRepository>,
+    pub cache: Arc<dyn Cache>,
     pub users: Arc<dyn UserRepository>,
     pub hasher: Arc<dyn PasswordHasher>,
     pub jwt_secret: Arc<String>,
 }
 
 impl DomainState {
-    pub fn new(db: DatabaseConnection, jwt_secret: String) -> Self {
+    /// `cache` : `RedisCache` en prod, `NoopCache` en dev/tests (cf. `main.rs`).
+    pub fn new(db: DatabaseConnection, cache: Arc<dyn Cache>, jwt_secret: String) -> Self {
         Self {
             feed: Arc::new(SeaOrmFeedRepository::new(db.clone())),
             posts: Arc::new(SeaOrmPostRepository::new(db.clone())),
@@ -50,6 +52,7 @@ impl DomainState {
             messages: Arc::new(SeaOrmMessageRepository::new(db.clone())),
             notifications: Arc::new(SeaOrmNotificationRepository::new(db.clone())),
             hashtags: Arc::new(SeaOrmHashtagRepository::new(db.clone())),
+            cache,
             users: Arc::new(SeaOrmUserRepository::new(db)),
             hasher: Arc::new(PasswordService::new()),
             jwt_secret: Arc::new(jwt_secret),

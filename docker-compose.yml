@@ -1,0 +1,53 @@
+# GRIND — full-stack Rust (Leptos SSR + WASM) + PostgreSQL + Redis.
+# En full-stack Leptos, « back » et « front » sont le MÊME binaire (le serveur SSR
+# sert le front hydraté ET les server functions) → un seul service `app`.
+#
+#   docker compose up --build
+#   → app sur http://localhost:3000
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: grind
+      POSTGRES_PASSWORD: grind
+      POSTGRES_DB: grind
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U grind -d grind"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://grind:grind@postgres:5432/grind
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: change-me-in-production
+      LEPTOS_SITE_ADDR: 0.0.0.0:3000
+    ports:
+      - "3000:3000"
+
+volumes:
+  pgdata:

@@ -341,6 +341,17 @@ pub trait HashtagRepository: Send + Sync {
     async fn trending(&self, limit: u64) -> Result<Vec<HashtagRow>, RepoError>;
 }
 
+/// Cache clé→valeur (Redis en prod). **Best-effort** : les opérations ne
+/// renvoient pas d'erreur — un cache indisponible ne doit jamais casser l'app,
+/// juste dégrader la perf (on relit la source). Cf. plan §5 (cache trending/timeline).
+#[async_trait]
+pub trait Cache: Send + Sync {
+    /// Valeur associée à `key`, ou `None` (absente, expirée, ou backend indisponible).
+    async fn get(&self, key: &str) -> Option<String>;
+    /// Écrit `value` sous `key` avec une expiration (secondes). Silencieux en cas d'échec.
+    async fn set(&self, key: &str, value: &str, ttl_secs: u64);
+}
+
 // ---------------------------------------------------------------------------
 // Use cases — orchestrent domaine + ports. Zéro dépendance framework.
 // ---------------------------------------------------------------------------

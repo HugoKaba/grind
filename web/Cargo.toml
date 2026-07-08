@@ -26,6 +26,7 @@ tokio = { version = "1", features = ["rt-multi-thread", "macros"], optional = tr
 tower-http = { version = "0.6", features = ["fs"], optional = true }
 jsonwebtoken = { version = "9", optional = true }
 chrono = { version = "0.4", default-features = false, features = ["clock"], optional = true }
+serde_json = { version = "1", optional = true }
 
 wasm-bindgen = { version = "0.2", optional = true }
 console_error_panic_hook = { version = "0.1", optional = true }
@@ -43,6 +44,7 @@ ssr = [
     "dep:grind-infrastructure",
     "dep:jsonwebtoken",
     "dep:chrono",
+    "dep:serde_json",
     "leptos/ssr",
     "leptos_meta/ssr",
     "leptos_router/ssr",

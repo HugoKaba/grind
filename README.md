@@ -10,19 +10,45 @@ cutover : **plus aucun runtime Python** (l'historique git en garde la trace).
 |-------|--------|-----------|
 | `crates/domain` | Domaine (entités sport + invariants, pur, WASM-safe) | rien |
 | `crates/application` | Use cases + ports (traits) | domain |
-| `crates/infrastructure` | Adapters (auth PBKDF2→argon2, plus tard SeaORM/Redis) | domain, application |
+| `crates/infrastructure` | Adapters : auth PBKDF2→argon2, SeaORM (Postgres/SQLite), cache Redis | domain, application |
 | `crates/shared` | DTOs serde partagés client/serveur | — |
 | `web/` | Présentation : app Leptos **hydratée** full-stack (SSR + WASM + server functions), via `cargo-leptos` | tout |
 
-## Build / test
+## Lancer avec Docker (Postgres + Redis)
+
+En full-stack Leptos, **back et front sont le même binaire** (le serveur SSR sert le
+front hydraté *et* les server functions). Le `docker-compose.yml` orchestre trois
+services : `app` (le binaire), `postgres`, `redis`.
+
+```sh
+docker compose up --build     # app sur http://localhost:3000
+```
+
+Au premier démarrage, l'app applique les migrations SeaORM et seede la base **si elle
+est vide** (idempotent : les redémarrages ne re-seedent pas). Le cache Redis sert la
+page trending (TTL 30 s) ; si Redis est injoignable, l'app dégrade proprement
+(`NoopCache`) sans planter. Config via env (`.env.example`) : `DATABASE_URL`,
+`REDIS_URL`, `JWT_SECRET`.
+
+Comptes de démo seedés : `messi` (staff) et `ronaldo`, mot de passe `grind1234`.
+
+## Build / test (local, sans Docker)
 
 Le repo est sur iCloud → rediriger `target/` hors iCloud pour éviter les tempêtes de sync :
 
 ```sh
 export CARGO_TARGET_DIR=/tmp/grind-rs-target   # target -> target.nosync (hors iCloud)
 cargo test --workspace                 # domain/application/infrastructure + intégration web
-cargo test -p grind-infrastructure     # spike auth (vérif hash Django réel) + repos SeaORM
-cargo test -p grind-web                # server functions via tower::oneshot (login, post, admin)
+cargo test -p grind-infrastructure     # auth (hash Django réel), repos SeaORM, cache
+cargo test -p grind-web                # server functions via tower::oneshot (e2e)
+```
+
+Sans `DATABASE_URL`, le binaire démarre sur **SQLite en mémoire** (dev rapide) ; sans
+`REDIS_URL`, le cache est désactivé. La compat **PostgreSQL** des migrations est
+couverte par un test *gated* :
+
+```sh
+TEST_DATABASE_URL=postgres://user@host/db cargo test -p grind-infrastructure
 ```
 
 ### Frontend hydraté (`web/`)

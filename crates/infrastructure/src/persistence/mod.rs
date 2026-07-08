@@ -31,6 +31,15 @@ pub async fn connect_and_migrate(url: &str) -> Result<DatabaseConnection, DbErr>
     Ok(db)
 }
 
+/// `true` si la base ne contient aucun utilisateur (→ à seeder). Permet un
+/// démarrage **idempotent** sur une BDD persistante (Postgres) : on ne seede
+/// qu'une fois, sans dupliquer à chaque redémarrage du conteneur.
+pub async fn is_empty(db: &DatabaseConnection) -> Result<bool, DbErr> {
+    use entities::users;
+    use sea_orm::{EntityTrait, PaginatorTrait};
+    Ok(users::Entity::find().count(db).await? == 0)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -48,5 +57,28 @@ mod tests {
                 .unwrap_or_else(|e| panic!("table {table} manquante: {e}"))
                 .expect("une ligne de résultat");
         }
+    }
+
+    /// Valide la portabilité **PostgreSQL** des migrations + du seed + de l'idempotence.
+    /// Ne s'exécute que si `TEST_DATABASE_URL` pointe vers un Postgres jetable :
+    /// `TEST_DATABASE_URL=postgres://grind@localhost:55432/grind cargo test -p grind-infrastructure`.
+    #[tokio::test]
+    async fn migrations_and_seed_run_on_postgres_when_configured() {
+        let Ok(url) = std::env::var("TEST_DATABASE_URL") else {
+            eprintln!("TEST_DATABASE_URL absent → test Postgres ignoré");
+            return;
+        };
+        let db = connect_and_migrate(&url).await.expect("connexion + migrations Postgres");
+
+        // Base neuve → vide, puis seed, puis plus vide (idempotence).
+        assert!(is_empty(&db).await.unwrap(), "base neuve doit être vide");
+        let report = crate::persistence::seed::seed_reference_and_athletes(
+            &db,
+            &crate::security::PasswordService::new(),
+        )
+        .await
+        .expect("seed Postgres");
+        assert_eq!(report.athletes, 2);
+        assert!(!is_empty(&db).await.unwrap(), "base seedée n'est plus vide");
     }
 }
