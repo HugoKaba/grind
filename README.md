@@ -78,3 +78,43 @@ Fonctionnalités (toutes câblées de bout en bout, testées aux 4 couches) :
 Routes SSR + hydratées : `/` (fil), `/post/:id` (détail + thread), `/u/:username` (profil),
 `/sports`, `/trending`, `/team/:slug`, `/match/:id`, `/messages` (+ `/:username`),
 `/notifications`, `/admin`.
+
+## Démarrage rapide (de A à Z)
+
+```sh
+# 1. Prérequis (une fois)
+rustup target add wasm32-unknown-unknown
+cargo install cargo-leptos --locked --version ^0.3   # embarque le wasm-bindgen aligné
+brew install binaryen                                # wasm-opt (optim WASM)
+
+# 2. Config
+cp .env.example .env        # adapter si besoin (sinon SQLite en mémoire + cache désactivé)
+
+# 3a. Lancer SANS Docker (dev rapide, SQLite en mémoire)
+cargo leptos serve          # http://127.0.0.1:3000
+
+# 3b. …OU avec Docker (Postgres + Redis)
+docker compose up --build   # http://localhost:3000
+```
+
+Comptes de démo (seedés au 1er démarrage) : **`messi`** (staff) ou **`ronaldo`**, mot de passe **`grind1234`**.
+
+## Déploiement (Render, gratuit)
+
+Le repo est prêt pour un déploiement **1-clic** via **Render Blueprint** (`render.yaml`, build depuis le
+`Dockerfile`). Démo en ligne : **https://grind-web.onrender.com**.
+
+```
+Render → New → Blueprint → connecter ce repo (branche eco/optimisations) → Deploy
+```
+
+Variables d'env à définir côté Render : `JWT_SECRET` (généré), et optionnellement `REDIS_URL`,
+`PYROSCOPE_URL` / `PYROSCOPE_USER` / `PYROSCOPE_TOKEN` (profiling continu).
+
+## Écoconception
+
+Ce dépôt est l'**implémentation optimisée** (migration full-Rust) d'un audit d'écoconception mené sur
+la version Django d'origine (sur `master`). Preuves techniques dans **`ecoconception/`** : mesures
+Lighthouse, profils Grafana Pyroscope (flamegraphs avant/après cache), tests **k6 Cloud**, stratégie
+de cache HIT/PASS, scripts de charge (`ecoconception/k6/`). Le rapport PDF complet est conservé hors
+dépôt (privé).

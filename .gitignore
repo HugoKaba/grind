@@ -32,8 +32,9 @@ __pycache__/
 
 # --- Divers local ---
 dump.rdb
-.claude/settings.local.json
 
 # --- Rapport écoconception : gardé privé (non versionné) ---
 /ecoconception/RAPPORT-OPTIMISATION-RUST.md
 /ecoconception/RAPPORT-OPTIMISATION-RUST.pdf
+/ecoconception/build-pdf.mjs
+/ecoconception/_report.html
