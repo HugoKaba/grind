@@ -17,8 +17,14 @@ const hits = new Counter("x_cache_hit");
 const misses = new Counter("x_cache_miss");
 
 export const options = {
+  // k6 Cloud : résultats envoyés au projet grind-loadtest. Même `name` => les runs
+  // AVANT (cache=off) et APRÈS (cache=on) sont groupés pour comparaison.
+  cloud: {
+    projectID: 8038849,
+    name: "grind-get-trending",
+  },
   scenarios: {
-    charge: { executor: "constant-vus", vus: 40, duration: "20s" },
+    charge: { executor: "constant-vus", vus: 40, duration: "30s" },
   },
   thresholds: {
     http_req_failed: ["rate<0.01"],

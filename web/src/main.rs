@@ -27,10 +27,17 @@ async fn main() {
             let backend = pyroscope_pprofrs::pprof_backend(
                 pyroscope_pprofrs::PprofConfig::new().sample_rate(100),
             );
-            match pyroscope::PyroscopeAgent::builder(url.as_str(), "grind-web")
+            let mut builder = pyroscope::PyroscopeAgent::builder(url.as_str(), "grind-web")
                 .backend(backend)
-                .tags([("cache", cache_tag)].to_vec())
-                .build()
+                .tags([("cache", cache_tag)].to_vec());
+            // Auth basic pour Grafana Cloud (username = Instance ID, password = token).
+            if let (Ok(user), Ok(token)) = (
+                std::env::var("PYROSCOPE_USER"),
+                std::env::var("PYROSCOPE_TOKEN"),
+            ) {
+                builder = builder.basic_auth(user, token);
+            }
+            match builder.build()
             {
                 Ok(agent) => match agent.start() {
                     Ok(running) => {
