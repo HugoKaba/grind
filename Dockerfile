@@ -9,7 +9,9 @@ FROM rust:1-bookworm AS builder
 RUN rustup target add wasm32-unknown-unknown \
     && apt-get update && apt-get install -y --no-install-recommends binaryen \
     && rm -rf /var/lib/apt/lists/*
-RUN cargo install cargo-leptos --locked --version ^0.2
+# cargo-leptos 0.3.x embarque le wasm-bindgen-cli qui correspond au crate
+# wasm-bindgen 0.2.126 verrouillé dans Cargo.lock (0.2.x → mismatch de schéma WASM).
+RUN cargo install cargo-leptos --locked --version ^0.3
 
 WORKDIR /app
 COPY . .
