@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="220" font-family="system-ui,Arial">
+<rect width="900" height="220" fill="#fff"/>
+<text x="20" y="30" font-size="16" font-weight="700" fill="#111">Débit homepage / — Django vs Rust (×39) — même test k6 40 VUs</text>
+<text x="20" y="50" font-size="12" fill="#6b7280">Django : 233 ms p95, 89 Mo RAM · Rust : 5,9 ms p95, 19 Mo RAM · même machine</text>
+<text x="20" y="98" font-size="13" fill="#374151">Django (mono-thread WSGI)</text>
+  <rect x="250" y="76" width="14.405144694533762" height="36" rx="4" fill="#ff4e42"/>
+  <text x="272.40514469453376" y="99" font-size="14" font-weight="700" fill="#111">208 req/s</text><text x="20" y="164" font-size="13" fill="#374151">Rust (Axum SSR)</text>
+  <rect x="250" y="142" width="560" height="36" rx="4" fill="#0cce6b"/>
+  <text x="818" y="165" font-size="14" font-weight="700" fill="#111">8,086 req/s</text></svg>
