@@ -1,0 +1,117 @@
+@import "tailwindcss";
+
+/* ── Tokens de thème (Tailwind v4 : config CSS-first) ──────────────────────
+   Chaque `--color-*` génère les utilitaires bg-/text-/border- correspondants. */
+@theme {
+  --color-ink: #15202b; /* fond */
+  --color-panel: #192734; /* cartes / nav */
+  --color-panel2: #1e2b38; /* hover */
+  --color-field: #253341; /* inputs */
+  --color-accent: #1d9bf0; /* bleu X */
+}
+
+/* ── Base : thème sombre X/Twitter appliqué aux éléments bruts ──────────── */
+@layer base {
+  body {
+    @apply bg-ink text-slate-100 antialiased;
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  h1 {
+    @apply text-2xl font-extrabold tracking-tight mt-1 mb-4;
+  }
+  h2 {
+    @apply text-lg font-bold text-slate-200 mt-6 mb-2;
+  }
+  h3 {
+    @apply text-sm font-semibold uppercase tracking-wide text-slate-400 mt-5 mb-2;
+  }
+  a {
+    @apply text-accent hover:underline underline-offset-2;
+  }
+  p {
+    @apply text-slate-300;
+  }
+  input[type="text"],
+  input[type="password"] {
+    @apply w-full rounded-xl bg-field border border-slate-600/70 px-4 py-2 my-1.5
+           text-slate-100 placeholder-slate-500
+           focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent;
+  }
+  button {
+    @apply inline-flex items-center gap-1 rounded-full border border-slate-600
+           bg-transparent px-3 py-1.5 text-sm font-medium text-slate-200
+           cursor-pointer transition-colors
+           hover:bg-slate-700/50 hover:border-slate-500
+           disabled:opacity-50;
+  }
+  /* Bouton d'action primaire (soumission de formulaire). */
+  button[type="submit"] {
+    @apply border-transparent bg-accent text-white font-semibold
+           hover:bg-sky-500 hover:border-transparent;
+  }
+}
+
+/* ── Composants : layout + cartes ──────────────────────────────────────── */
+@layer components {
+  .nav {
+    @apply sticky top-0 z-10 flex flex-wrap items-center gap-x-4 gap-y-1
+           border-b border-slate-700/80 bg-panel/95 backdrop-blur
+           px-4 py-3 text-sm font-semibold;
+  }
+  .nav a {
+    @apply text-slate-300 no-underline hover:text-accent;
+  }
+
+  .page {
+    @apply mx-auto w-full max-w-2xl px-4 py-6;
+  }
+
+  .feed,
+  .thread,
+  .conversations,
+  .notifications,
+  .trending {
+    @apply list-none p-0 m-0 space-y-3;
+  }
+
+  /* Cartes (posts, éléments de liste). */
+  .feed > li,
+  .thread > li,
+  .conversations > li,
+  .notifications > li,
+  .trending > li,
+  .post {
+    @apply rounded-2xl border border-slate-700/70 bg-panel p-4
+           hover:bg-panel2 transition-colors;
+  }
+  .post-detail {
+    @apply rounded-2xl border border-slate-700/70 bg-panel p-4 mb-4;
+  }
+  .post-detail h2 {
+    @apply mt-0;
+  }
+  .profile-header {
+    @apply mb-4;
+  }
+
+  /* Auteur + métriques dans une carte. */
+  .post strong,
+  .feed strong,
+  .thread strong {
+    @apply font-semibold text-slate-100;
+  }
+  .post em,
+  .feed em {
+    @apply not-italic text-sm text-slate-400;
+  }
+
+  /* Boutons d'action en ligne (like / repost / bookmark) : compacts, espacés. */
+  .post form,
+  .feed form {
+    @apply inline-block mt-2 mr-1.5 align-middle;
+  }
+  .post form button,
+  .feed form button {
+    @apply text-xs px-2.5 py-1;
+  }
+}

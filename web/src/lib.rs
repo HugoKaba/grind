@@ -54,12 +54,16 @@ pub fn App() -> impl IntoView {
         <Stylesheet id="leptos" href="/pkg/grind.css" />
         <Title text="GRIND" />
         <Router>
-            <nav>
-                <A href="/">"Accueil"</A>" · "<A href="/sports">"Sports"</A>" · "
-                <A href="/trending">"Trending"</A>" · "<A href="/messages">"Messages"</A>" · "
-                <A href="/notifications">"Notifs"</A>" · "<A href="/admin">"Admin"</A>
+            <nav class="nav">
+                <span class="mr-2 font-extrabold tracking-tight text-slate-100">"🏟️ GRIND"</span>
+                <A href="/">"Accueil"</A>
+                <A href="/sports">"Sports"</A>
+                <A href="/trending">"Trending"</A>
+                <A href="/messages">"Messages"</A>
+                <A href="/notifications">"Notifs"</A>
+                <A href="/admin">"Admin"</A>
             </nav>
-            <main>
+            <main class="page">
                 <Routes fallback=|| "Page introuvable.".into_view()>
                     <Route path=path!("/") view=Home />
                     <Route path=path!("/post/:id") view=PostDetail />

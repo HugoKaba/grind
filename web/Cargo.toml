@@ -65,3 +65,6 @@ bin-features = ["ssr"]
 bin-default-features = false
 lib-features = ["hydrate"]
 lib-default-features = false
+# TailwindCSS v4 (config CSS-first, cf. style/tailwind.css) : cargo-leptos compile
+# ce fichier vers /pkg/grind.css via le binaire Tailwind standalone (pas de Node).
+tailwind-input-file = "style/tailwind.css"
