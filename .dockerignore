@@ -1,0 +1,7 @@
+# Ne pas envoyer au contexte de build (lourd / inutile / iCloud)
+target
+target.nosync
+.git
+.venv
+**/*.rs.bk
+.DS_Store

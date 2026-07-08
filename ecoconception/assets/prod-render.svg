@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 470" font-family="Inter, Arial, sans-serif">
+  <rect width="900" height="470" fill="#ffffff"/>
+  <text x="30" y="42" font-size="22" font-weight="700" fill="#111827">Hébergement en ligne (Render · free tier) — mesures réelles prod↔prod</text>
+  <text x="30" y="66" font-size="13" fill="#6b7280">grind-web.onrender.com (Rust · Leptos+Axum · Docker)  vs  grind-django.onrender.com (Django · gunicorn · SQLite)</text>
+
+  <!-- Bloc 1 : Poids de la page / (bande passante) -->
+  <text x="30" y="112" font-size="15" font-weight="700" fill="#111827">Poids de la page d'accueil « / » (octets transférés)</text>
+  <!-- Django bar -->
+  <text x="30" y="150" font-size="13" fill="#374151">Django</text>
+  <rect x="110" y="136" width="600" height="22" rx="4" fill="#f3556d"/>
+  <text x="722" y="153" font-size="13" font-weight="700" fill="#b91c1c">51 973 o (52 KB)</text>
+  <!-- Rust bar (14396/51973*600 = 166) -->
+  <text x="30" y="186" font-size="13" fill="#374151">Rust</text>
+  <rect x="110" y="172" width="166" height="22" rx="4" fill="#16a34a"/>
+  <text x="288" y="189" font-size="13" font-weight="700" fill="#166534">14 396 o (14 KB) — −73 %</text>
+
+  <!-- Bloc 2 : k6 Cloud 30 VU (warmed) -->
+  <text x="30" y="238" font-size="15" font-weight="700" fill="#111827">k6 Cloud — 30 VUs, instances réchauffées (steady-state)</text>
+  <text x="30" y="262" font-size="12" fill="#6b7280">Zone de charge Columbus (US) → serveurs Oregon. À charge modérée, la latence réseau domine : les deux se valent.</text>
+  <g font-size="13">
+    <rect x="30" y="276" width="410" height="26" fill="#f9fafb" stroke="#e5e7eb"/>
+    <rect x="440" y="276" width="215" height="26" fill="#f9fafb" stroke="#e5e7eb"/>
+    <rect x="655" y="276" width="215" height="26" fill="#f9fafb" stroke="#e5e7eb"/>
+    <text x="40" y="294" fill="#374151" font-weight="700">Indicateur</text>
+    <text x="450" y="294" fill="#166534" font-weight="700">Rust</text>
+    <text x="665" y="294" fill="#b91c1c" font-weight="700">Django</text>
+
+    <text x="40" y="322" fill="#374151">Requêtes servies</text>
+    <text x="450" y="322" fill="#111827">3 915</text>
+    <text x="665" y="322" fill="#111827">4 086</text>
+    <text x="40" y="348" fill="#374151">Échecs HTTP</text>
+    <text x="450" y="348" fill="#16a34a" font-weight="700">0</text>
+    <text x="665" y="348" fill="#16a34a" font-weight="700">0</text>
+    <text x="40" y="374" fill="#374151">P95 temps de réponse</text>
+    <text x="450" y="374" fill="#111827">607 ms</text>
+    <text x="665" y="374" fill="#111827">606 ms</text>
+    <text x="40" y="400" fill="#374151">Pic débit</text>
+    <text x="450" y="400" fill="#111827">68 req/s</text>
+    <text x="665" y="400" fill="#111827">66,7 req/s</text>
+  </g>
+
+  <!-- Bloc 3 : note cold start -->
+  <rect x="30" y="418" width="840" height="34" rx="6" fill="#fef2f2" stroke="#fecaca"/>
+  <text x="44" y="440" font-size="12.5" fill="#991b1b">Cold-start (1re requête, instance endormie) : Django = 22 req, 100 % d'échec, P95 ≈ 60 s.  Le vrai écart CPU (Rust ×39) est mesuré en local same-machine (Partie 10.1), hors bruit réseau.</text>
+</svg>

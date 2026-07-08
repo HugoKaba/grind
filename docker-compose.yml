@@ -1,45 +1,53 @@
-version: '3.8'
+# GRIND — full-stack Rust (Leptos SSR + WASM) + PostgreSQL + Redis.
+# En full-stack Leptos, « back » et « front » sont le MÊME binaire (le serveur SSR
+# sert le front hydraté ET les server functions) → un seul service `app`.
+#
+#   docker compose up --build
+#   → app sur http://localhost:3000
 
 services:
   postgres:
-    image: postgres:15-alpine
-    container_name: qa_platform_db
+    image: postgres:16-alpine
     environment:
-      POSTGRES_DB: qa_platform
-      POSTGRES_USER: qa_user
-      POSTGRES_PASSWORD: qa_password_secure
-      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+      POSTGRES_USER: grind
+      POSTGRES_PASSWORD: grind
+      POSTGRES_DB: grind
+    volumes:
+      - pgdata:/var/lib/postgresql/data
     ports:
       - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U qa_user -d qa_platform"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - qa_network
+      test: ["CMD-SHELL", "pg_isready -U grind -d grind"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
   redis:
     image: redis:7-alpine
-    container_name: qa_platform_cache
     ports:
       - "6379:6379"
-    volumes:
-      - redis_data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - qa_network
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://grind:grind@postgres:5432/grind
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: change-me-in-production
+      LEPTOS_SITE_ADDR: 0.0.0.0:3000
+    ports:
+      - "3000:3000"
 
 volumes:
-  postgres_data:
-  redis_data:
-
-networks:
-  qa_network:
-    driver: bridge
+  pgdata:

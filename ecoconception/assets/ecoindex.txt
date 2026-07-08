@@ -1,0 +1,7 @@
+=== EcoIndex (formule officielle cnumr — page /) ===
+DOM éléments : 247
+Requêtes     : 5
+Poids        : 447.0 Ko
+----
+Score        : 71/100   Grade B
+Empreinte    : ~1.81 gCO2e/visite · ~1.40 cl eau/visite

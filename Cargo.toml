@@ -1,0 +1,27 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/domain",
+    "crates/application",
+    "crates/shared",
+    "crates/infrastructure",
+    "web",
+]
+
+[workspace.package]
+edition = "2021"
+version = "0.1.0"
+license = "MIT"
+
+[workspace.dependencies]
+thiserror = "2"
+async-trait = "0.1"
+serde = { version = "1", features = ["derive"] }
+# auth spike (infrastructure)
+argon2 = { version = "0.5", features = ["std"] }
+pbkdf2 = "0.12"
+sha2 = "0.10"
+base64 = "0.22"
+subtle = "2"
+# async tests
+tokio = { version = "1", features = ["macros", "rt"] }

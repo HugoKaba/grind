@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="860" height="215" font-family="system-ui,Arial">
+<rect width="860" height="215" fill="#fff"/>
+<text x="20" y="30" font-size="16" font-weight="700" fill="#111">k6 Cloud — get_trending : pic de débit ×2,76 grâce au cache</text>
+<text x="20" y="50" font-size="12" fill="#6b7280">40 VUs · 30 s · P95 2,93 ms → 1,59 ms (−46%) · 541K → 1,4M requêtes · 0 échec</text>
+<text x="20" y="96" font-size="13" fill="#374151">Sans cache (cache=off)</text>
+  <rect x="230" y="74" width="188.60476614258877" height="34" rx="4" fill="#ff4e42"/>
+  <text x="426.6047661425888" y="96" font-size="13" font-weight="700" fill="#111">18,340 req/s (pic)</text><text x="20" y="158" font-size="13" fill="#374151">Avec cache (cache=on)</text>
+  <rect x="230" y="136" width="520" height="34" rx="4" fill="#0cce6b"/>
+  <text x="758" y="158" font-size="13" font-weight="700" fill="#111">50,565 req/s (pic)</text></svg>

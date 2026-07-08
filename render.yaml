@@ -1,0 +1,31 @@
+# Blueprint Render — déploiement gratuit de GRIND (Leptos + Axum) depuis le Dockerfile.
+# Déploiement : https://dashboard.render.com → New → Blueprint → connecter ce repo.
+# L'app tourne en autonomie (SQLite en mémoire + cache Redis optionnel via Key Value).
+services:
+  - type: web
+    name: grind-web
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    autoDeploy: true
+    healthCheckPath: /
+    envVars:
+      - key: LEPTOS_SITE_ADDR
+        value: 0.0.0.0:3000
+      - key: JWT_SECRET
+        generateValue: true # secret fort généré par Render
+      - key: RUST_LOG
+        value: info
+      # Cache Redis (optionnel) : décommenter + lier une instance Key Value pour le HIT/MISS.
+      # - key: REDIS_URL
+      #   fromService: { type: keyvalue, name: grind-cache, property: connectionString }
+      # Profiling Grafana Cloud (optionnel) : à renseigner dans le dashboard Render.
+      # - key: PYROSCOPE_URL   # https://profiles-prod-002.grafana.net
+      # - key: PYROSCOPE_USER  # Instance ID
+      # - key: PYROSCOPE_TOKEN # Access Policy token (secret)
+
+# Cache Redis gratuit (décommenter pour la démo HIT/MISS en prod) :
+# - type: keyvalue
+#   name: grind-cache
+#   plan: free
+#   maxmemoryPolicy: allkeys-lru

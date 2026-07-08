@@ -1,0 +1,29 @@
+###############################################################
+# PREUVE STRATÉGIE DE CACHE — Public (HIT) vs Private (PASS/MISS)
+# App GRIND Rust (Axum) — build release — requêtes GET
+# Wed Jul  8 11:09:03 CEST 2026
+###############################################################
+
+===== 1) ROUTE PUBLIQUE  /  (anonyme, sans cookie) → HIT autorisé =====
+$ curl -s -D - -o /dev/null http://127.0.0.1:3000/
+HTTP/1.1 200 OK
+cache-control: public, max-age=0, s-maxage=60, stale-while-revalidate=30
+
+===== 2) MÊME ROUTE  /  AUTHENTIFIÉE (cookie de session) → PASS/MISS =====
+$ curl -s -D - -o /dev/null -H 'Cookie: session=…' http://127.0.0.1:3000/
+HTTP/1.1 200 OK
+cache-control: private, no-store
+
+===== 3) ROUTE PUBLIQUE  /trending  (anonyme) → HIT autorisé =====
+cache-control: public, max-age=0, s-maxage=60, stale-while-revalidate=30
+
+===== 4) ROUTE PRIVÉE  /notifications  (données utilisateur) → PASS/MISS =====
+cache-control: private, no-store
+
+===== 5) ASSET versionné  /pkg/grind.wasm → cache long immutable =====
+cache-control: public, max-age=31536000, immutable
+
+===== 6) CACHE APPLICATIF Redis — POST /api/get_trending (X-Cache) =====
+1er appel (froid) : x-cache: MISS
+2e appel (chaud)  : x-cache: HIT
+3e appel (chaud)  : x-cache: HIT

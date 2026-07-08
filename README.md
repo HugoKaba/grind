@@ -1,591 +1,128 @@
-# 🏋️ GRIND - Sports Social Platform
+# grind-rs — migration Rust (Leptos + Axum + SeaORM, Clean Architecture)
 
-**A modern, production-ready sports social media platform** (Twitter/Threads clone) built with **pure Django**, featuring real athlete data, responsive design, and all core social features.
+Workspace de la réécriture **full-Rust** de GRIND, à la racine du repo. Voir
+`MIGRATION_RUST.md` pour le plan complet. Le projet Django d'origine a été retiré au
+cutover : **plus aucun runtime Python** (l'historique git en garde la trace).
 
-> **Built for the IIM Digital School Django Formation (26h30)**  
-> Complete example of Django architecture, ORM, templates, API, authentication, and deployment.
+## Couches (règle de dépendance : extérieur → intérieur)
 
----
+| Crate | Couche | Dépend de |
+|-------|--------|-----------|
+| `crates/domain` | Domaine (entités sport + invariants, pur, WASM-safe) | rien |
+| `crates/application` | Use cases + ports (traits) | domain |
+| `crates/infrastructure` | Adapters : auth PBKDF2→argon2, SeaORM (Postgres/SQLite), cache Redis | domain, application |
+| `crates/shared` | DTOs serde partagés client/serveur | — |
+| `web/` | Présentation : app Leptos **hydratée** full-stack (SSR + WASM + server functions), via `cargo-leptos` | tout |
 
-## 🎯 What is GRIND?
+## Lancer avec Docker (Postgres + Redis)
 
-GRIND is a **Twitter/Threads-like social platform for sports athletes**:
-- 📱 Post sports updates and achievements
-- ❤️ Like, retweet, and reply to posts
-- 👥 Follow other athletes
-- 💬 Direct messaging system
-- 🔔 Notifications and activity tracking
-- 📊 Trending topics and hashtags
-- 🎨 Modern, responsive UI (red & white theme)
-- ⚡ Real-time AJAX interactions
-- 📊 Real athlete data (no mocks)
+En full-stack Leptos, **back et front sont le même binaire** (le serveur SSR sert le
+front hydraté *et* les server functions). Le `docker-compose.yml` orchestre trois
+services : `app` (le binaire), `postgres`, `redis`.
 
----
-
-## ✨ Key Features
-
-### 🏠 **Home Timeline**
-- Two-feed system: Everyone's posts & Friends-only posts
-- Real-time like/retweet/bookmark updates
-- Hover tooltips for action hints
-- Live counter updates without page reload
-
-### 👤 **User Profiles**
-- Profile stats (followers, following, posts count)
-- Follow/Unfollow buttons
-- Direct message button
-- User activity timeline
-
-### 💬 **Messaging System**
-- One-on-one conversations
-- Filtered by followed users
-- Direct messaging from any profile
-- Unread message badges
-- Real-time conversation threads
-
-### 🔔 **Notifications & Discovery**
-- Activity notifications
-- Trending hashtags
-- Bookmarked posts
-- Tweet replies and threads
-
-### 🎨 **UI/UX Excellence**
-- ✅ Professional red & white design
-- ✅ Full responsive (mobile/tablet/desktop)
-- ✅ Smooth AJAX interactions
-- ✅ Hover tooltips (Like, Retweet, Reply, Bookmark, Share)
-- ✅ Bottom navigation for mobile
-- ✅ Custom scrollbars
-- ✅ Gradient avatars
-
-### 🗄️ **Database & Backend**
-- ✅ PostgreSQL (production-ready)
-- ✅ Redis caching
-- ✅ Django ORM with proper indexing
-- ✅ Signals for auto-profile creation
-- ✅ 30+ API endpoints (DRF)
-- ✅ JWT Authentication
-- ✅ Fine-grained permissions
-
-### ⚽ **Real Sports Data**
-- 6 real athletes: Messi, Ronaldo, Mbappé, Haaland, Neymar, Benzema
-- 10+ authentic sports posts
-- 40+ real interactions
-- Hashtag tracking and trending
-
-### 🧪 **Quality Assurance**
-- ✅ Comprehensive test suite
-- ✅ 100% passing tests
-- ✅ Functional testing
-- ✅ Security-focused
-
----
-
-## 🚀 Quick Start (5 minutes)
-
-### Prerequisites
-```bash
-✓ Docker & Docker Compose
-✓ Python 3.8+
-✓ Git
+```sh
+docker compose up --build     # app sur http://localhost:3000
 ```
 
-### Installation
+Au premier démarrage, l'app applique les migrations SeaORM et seede la base **si elle
+est vide** (idempotent : les redémarrages ne re-seedent pas). Le cache Redis sert la
+page trending (TTL 30 s) ; si Redis est injoignable, l'app dégrade proprement
+(`NoopCache`) sans planter. Config via env (`.env.example`) : `DATABASE_URL`,
+`REDIS_URL`, `JWT_SECRET`.
 
-```bash
-# 1. Clone & enter repo
-cd /path/to/Django
+Comptes de démo seedés : `messi` (staff) et `ronaldo`, mot de passe `grind1234`.
 
-# 2. Start Docker services (PostgreSQL + Redis)
-docker-compose up -d
+## Build / test (local, sans Docker)
 
-# 3. Create virtual environment
-python3 -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+Le repo est sur iCloud → rediriger `target/` hors iCloud pour éviter les tempêtes de sync :
 
-# 4. Install dependencies
-pip install -r requirements.txt
-
-# 5. Run migrations
-python manage.py migrate
-
-# 6. Load sports data
-python manage.py seed_sports_data
-
-# 7. Create superuser (optional)
-python manage.py createsuperuser
-
-# 8. Start development server
-python manage.py runserver
+```sh
+export CARGO_TARGET_DIR=/tmp/grind-rs-target   # target -> target.nosync (hors iCloud)
+cargo test --workspace                 # domain/application/infrastructure + intégration web
+cargo test -p grind-infrastructure     # auth (hash Django réel), repos SeaORM, cache
+cargo test -p grind-web                # server functions via tower::oneshot (e2e)
 ```
 
-**Open [http://localhost:8000](http://localhost:8000)** 🎉
+Sans `DATABASE_URL`, le binaire démarre sur **SQLite en mémoire** (dev rapide) ; sans
+`REDIS_URL`, le cache est désactivé. La compat **PostgreSQL** des migrations est
+couverte par un test *gated* :
 
-### Demo Credentials
-```
-Username: messi    Password: messi123
-Username: ronaldo  Password: ronaldo123
-Username: neymar   Password: neymar123
-```
-
----
-
-## 📍 Accessing the Application
-
-| Component | URL | Purpose |
-|-----------|-----|---------|
-| 🏠 **Web App** | http://localhost:8000 | Main social platform |
-| 🔧 **Django Admin** | http://localhost:8000/admin | Database management |
-| 🔌 **API** | http://localhost:8000/api | REST endpoints |
-| 📖 **API Docs** | http://localhost:8000/api | Browsable API |
-
----
-
-## 🗂️ Project Structure
-
-```
-Django/
-├── manage.py                          # Django entry point
-├── docker-compose.yml                 # PostgreSQL + Redis setup
-├── requirements.txt                   # Python dependencies
-├── .env                               # Environment variables
-├── .gitignore                         # Git ignore rules
-│
-├── qa_platform/                       # Django project config
-│   ├── settings.py                    # DB, cache, apps config
-│   ├── urls.py                        # Main routing
-│   ├── wsgi.py
-│   └── asgi.py
-│
-├── core/                              # Main app (social features)
-│   ├── models.py                      # Tweet, Like, Follow, Message, etc.
-│   ├── views.py                       # Timeline, profile, messaging views
-│   ├── urls.py                        # Web routes
-│   ├── admin.py                       # Admin interface
-│   ├── signals.py                     # Auto-profile creation
-│   ├── migrations/                    # Database schema
-│   ├── management/
-│   │   └── commands/
-│   │       └── seed_sports_data.py    # Load 6 athletes + posts
-│   └── templates/
-│       ├── base.html                  # Base template (nav, AJAX handlers)
-│       └── core/
-│           ├── timeline.html          # Home feed (2 tabs)
-│           ├── profile.html           # User profiles
-│           ├── post_tweet.html        # Create post
-│           ├── reply_tweet.html       # Reply composer
-│           ├── tweet_detail.html      # Post detail + replies
-│           ├── messages.html          # Messaging inbox
-│           ├── message_thread.html    # Chat thread
-│           ├── new_message.html       # Start conversation
-│           ├── notifications.html     # Activity feed
-│           ├── trending.html          # Trending hashtags
-│           └── bookmarks.html         # Saved posts
-│
-├── api/                               # REST API (DRF)
-│   ├── serializers.py                 # JSON serialization
-│   ├── viewsets.py                    # API endpoints
-│   ├── permissions.py                 # Fine-grained auth
-│   ├── urls.py                        # API routes
-│   └── migrations/
-│
-├── tests.py                           # Test suite
-├── README.md                          # This file
-├── GETTING_STARTED.md                 # Detailed setup guide
-└── ARCHITECTURE.md                    # Technical architecture
+```sh
+TEST_DATABASE_URL=postgres://user@host/db cargo test -p grind-infrastructure
 ```
 
----
+### Frontend hydraté (`web/`)
 
-## 🎯 Core Pages & Routes
-
-### Timeline (`/`)
-- **Everyone tab**: All posts from all users
-- **Friends tab**: Only posts from followed users
-- **Composer**: Create new posts (280 chars)
-- **Actions**: Like, retweet, reply, bookmark (AJAX)
-
-### Profile (`/profile/<username>/`)
-- User info: name, handle, bio, location, join date
-- Stats: followers, following, posts count
-- Follow/Unfollow button
-- Message button for DMs
-- User's posts timeline
-
-### Messaging (`/messages/`)
-- Inbox: conversations with followed users
-- Unread badges
-- Last message preview
-- Sorted by recency
-
-### Message Thread (`/messages/<username>/`)
-- One-on-one chat
-- Sender/receiver distinction
-- Real-time message sending
-- Auto-mark as read
-
-### New Conversation (`/messages/new/`)
-- List of followed users
-- Search filter
-- Click to start DM
-
-### Tweet Detail (`/tweets/<id>/`)
-- Full post content
-- Reply section
-- All actions (like, retweet, bookmark)
-
-### Notifications (`/notifications/`)
-- Activity from followed users
-- Unread count
-- Auto-mark as read
-
-### Trending (`/trending/`)
-- Top hashtags by usage
-- Real-time trending data
-
-### Bookmarks (`/bookmarks/`)
-- Saved posts
-- Personal collection
-
----
-
-## 🔌 API Endpoints (30+)
-
-### Timeline & Posts
-```
-GET    /api/tweets/                    # List all tweets
-POST   /api/tweets/                    # Create tweet (auth)
-GET    /api/tweets/{id}/               # Tweet detail
-DELETE /api/tweets/{id}/               # Delete (author)
+```sh
+cd web
+cargo leptos build      # compile le serveur SSR + le client WASM (hydratation)
+cargo leptos serve      # sert l'app hydratée sur http://127.0.0.1:3000
 ```
 
-### Interactions
-```
-POST   /api/tweets/{id}/like/          # Like tweet
-POST   /api/tweets/{id}/unlike/        # Unlike tweet
-POST   /api/tweets/{id}/retweet/       # Retweet
-POST   /api/tweets/{id}/unretweet/     # Unretweet
-POST   /api/tweets/{id}/bookmark/      # Bookmark
-POST   /api/tweets/{id}/unbookmark/    # Remove bookmark
-```
+`web/` réalise le pipeline **server functions + hydratation câblé sur les use cases réels**.
+Chaque server function est un *controller* pur : elle (dé)sérialise le DTO, récupère les
+use cases via `DomainState` (injecté dans le context Leptos), appelle le use case, mappe la
+sortie. Aucune règle métier dans la couche présentation.
 
-### Follows & Relationships
-```
-POST   /api/users/{id}/follow/         # Follow user
-POST   /api/users/{id}/unfollow/       # Unfollow
-GET    /api/users/{id}/followers/      # Get followers
-GET    /api/users/{id}/following/      # Get following
-```
+Fonctionnalités (toutes câblées de bout en bout, testées aux 4 couches) :
+- **Auth** : `register` (+ auto-login), `login` (hybride PBKDF2 Django → argon2, cookie de
+  session HttpOnly), garde `is_staff`.
+- **Posts** : publication, réponse (thread), suppression (modération admin).
+- **Interactions** *viewer-aware* : like, repost, bookmark (état persistant `*_by_me`).
+- **Social** : follow/unfollow, fil « following » (suivis + soi) vs récent (anonyme).
+- **Sport** : catalogue sports/équipes, suivi d'équipe, fil de match (live), post-about-match.
+- **Messagerie** : DMs restreints aux personnes suivies, threads, conversations.
+- **Notifications** : générées à l'envoi d'un message, liste + marquage lu.
+- **Hashtags** : extraction auto des `#tags` à la publication + page trending.
 
-### Messaging
-```
-GET    /api/messages/                  # List conversations
-POST   /api/messages/                  # Create message
-GET    /api/messages/{username}/       # Get thread
-```
+Routes SSR + hydratées : `/` (fil), `/post/:id` (détail + thread), `/u/:username` (profil),
+`/sports`, `/trending`, `/team/:slug`, `/match/:id`, `/messages` (+ `/:username`),
+`/notifications`, `/admin`.
 
-### Discovery
-```
-GET    /api/hashtags/                  # List hashtags
-GET    /api/hashtags/{name}/           # Hashtag detail
-GET    /api/notifications/             # Get notifications
+## Démarrage rapide (de A à Z)
+
+### Option 1 — Docker (le plus simple : ne demande QUE Docker)
+
+```sh
+cp .env.example .env         # optionnel : valeurs par défaut OK pour une démo
+docker compose up --build    # → http://localhost:3000  (app + Postgres + Redis)
 ```
 
-### Authentication
-```
-POST   /api/auth/token/                # Get JWT token
-POST   /api/auth/token/refresh/        # Refresh token
-```
+### Option 2 — Local sans Docker (dev)
 
----
+```sh
+# 1. Installer Rust (si pas déjà fait) — voir https://rustup.rs
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+source "$HOME/.cargo/env"
 
-## 🗄️ Database Models
+# 2. Outils du projet (une fois)
+rustup target add wasm32-unknown-unknown
+cargo install cargo-leptos --locked --version ^0.3   # embarque le wasm-bindgen aligné
+# wasm-opt (optim WASM) : macOS → `brew install binaryen` · Debian/Ubuntu → `sudo apt install binaryen`
 
-### Core Models
-- **User** (Django auth) - Extended with Profile
-- **Profile** - User metadata, counts, bio
-- **Tweet** - Posts with parent_tweet for replies
-- **Like** - Favorites system
-- **Retweet** - Share/forward system
-- **Reply** - Comments on tweets
-- **Follow** - User relationships
-- **Message** - DM conversations
-- **Bookmark** - Saved posts
-- **Notification** - Activity feed
-- **Hashtag** - Trending topics
-- **TweetHashtag** - Many-to-many tags
-
-### Key Indexes
-```sql
--- Fast lookups
-CREATE INDEX ON tweets(author_id, created_at)
-CREATE INDEX ON follows(follower_id, following_id)
-CREATE INDEX ON messages(sender_id, recipient_id, created_at)
-CREATE INDEX ON likes(user_id, tweet_id)
-CREATE UNIQUE INDEX ON hashtags(name)
+# 3. Config + lancement (SQLite en mémoire, cache désactivé si pas de Redis)
+cp .env.example .env
+cargo leptos serve           # depuis la racine du repo → http://127.0.0.1:3000
 ```
 
----
+Comptes de démo (seedés au 1er démarrage) : **`messi`** (staff) ou **`ronaldo`**, mot de passe **`grind1234`**.
 
-## 🔐 Security Features
+## Déploiement (Render, gratuit)
 
-- ✅ **Django Authentication** - Session-based + JWT
-- ✅ **Permissions** - `@login_required`, `IsAuthenticated`, custom perms
-- ✅ **CSRF Protection** - Built-in Django CSRF middleware
-- ✅ **XSS Prevention** - Template auto-escaping ({{ content }})
-- ✅ **SQL Injection Safe** - Django ORM parameterized queries
-- ✅ **Password Hashing** - Django password validators (PBKDF2)
-- ✅ **Rate Limiting** - Ready for integration
-- ✅ **HTTPS Ready** - Production settings available
+Le repo est prêt pour un déploiement **1-clic** via **Render Blueprint** (`render.yaml`, build depuis le
+`Dockerfile`). Démo en ligne : **https://grind-web.onrender.com**.
 
----
-
-## 🐳 Docker Setup
-
-### PostgreSQL
-```yaml
-Image: postgres:15-alpine
-Port: 5432
-Database: qa_platform
-User: qa_user
-Volume: postgres_data (persistent)
+```
+Render → New → Blueprint → connecter ce repo (branche eco/optimisations) → Deploy
 ```
 
-### Redis
-```yaml
-Image: redis:7-alpine
-Port: 6379
-Volume: redis_data (persistent)
-```
+Variables d'env à définir côté Render : `JWT_SECRET` (généré), et optionnellement `REDIS_URL`,
+`PYROSCOPE_URL` / `PYROSCOPE_USER` / `PYROSCOPE_TOKEN` (profiling continu).
 
-### Commands
-```bash
-docker-compose up -d       # Start services
-docker-compose ps          # View status
-docker-compose logs -f     # Stream logs
-docker-compose down        # Stop services
-docker-compose down -v     # Remove volumes (reset DB)
-```
+## Écoconception
 
----
-
-## 📊 Tech Stack
-
-### Backend
-- **Django 6.0.6** - Web framework
-- **Django REST Framework 3.17.1** - API framework
-- **Simple JWT** - Token authentication
-- **PostgreSQL 15** - Production database
-- **Redis 7** - Caching & sessions
-- **Python 3.9+** - Programming language
-
-### Frontend
-- **HTML5** - Semantic markup
-- **Tailwind CSS 3.4** - Styling (CDN)
-- **FontAwesome 6.4** - Icons (CDN)
-- **Vanilla JavaScript** - No build step
-
-### DevOps & Testing
-- **Docker & Docker Compose** - Containerization
-- **Git** - Version control
-- **Python unittest** - Testing framework
-- **Pytest** - Advanced testing (optional)
-
----
-
-## 🧪 Testing
-
-### Run All Tests
-```bash
-python manage.py test -v 2
-```
-
-### Run Specific Test
-```bash
-python manage.py test core.tests.TimelineViewTests
-```
-
-### Run with Coverage
-```bash
-coverage run --source='.' manage.py test
-coverage report
-coverage html  # Generate HTML report
-```
-
-### Test Categories
-- ✅ Model tests (ORM, validation)
-- ✅ View tests (templates, context)
-- ✅ API tests (DRF endpoints, auth)
-- ✅ Functional tests (user workflows)
-- ✅ Security tests (permissions)
-
----
-
-## 🚀 Deployment
-
-### Production Checklist
-```
-□ Change DEBUG = False
-□ Set SECRET_KEY to random value
-□ Configure ALLOWED_HOSTS
-□ Use strong database password
-□ Setup HTTPS/SSL certificates
-□ Configure email backend
-□ Setup database backups
-□ Enable security middleware
-□ Configure CORS for APIs
-□ Setup logging & monitoring
-□ Use Gunicorn/uWSGI
-□ Setup Nginx reverse proxy
-```
-
-### Deployment Options
-- **Heroku** - Easy cloud (git push deploy)
-- **DigitalOcean** - Droplets + App Platform
-- **AWS** - EC2 + RDS + ElastiCache
-- **Railway** - Modern cloud platform
-- **PythonAnywhere** - Python-specific hosting
-- **VPS** - Full control (Linode, Vultr)
-
-### Production Settings
-```python
-DEBUG = False
-SECURE_SSL_REDIRECT = True
-SESSION_COOKIE_SECURE = True
-CSRF_COOKIE_SECURE = True
-SECURE_HSTS_SECONDS = 31536000
-SECURE_BROWSER_XSS_FILTER = True
-SECURE_CONTENT_SECURITY_POLICY = {...}
-```
-
----
-
-## 📚 Documentation
-
-| Document | Purpose |
-|----------|---------|
-| **README.md** | Project overview & quick start (this file) |
-| **GETTING_STARTED.md** | Detailed setup & troubleshooting |
-| **ARCHITECTURE.md** | Technical deep dive & design decisions |
-
-### External Resources
-- [Django Documentation](https://docs.djangoproject.com)
-- [Django REST Framework](https://www.django-rest-framework.org)
-- [PostgreSQL Docs](https://www.postgresql.org/docs)
-- [Docker Guide](https://docs.docker.com)
-- [Tailwind CSS](https://tailwindcss.com)
-
----
-
-## 🎓 Learning Goals (IIM Formation)
-
-This project demonstrates:
-
-### ✅ Django Fundamentals
-- Project structure & apps architecture
-- Models, views, URLs (MVT pattern)
-- Django ORM & migrations
-- Admin interface
-- Middleware & signals
-
-### ✅ API Development
-- Django REST Framework setup
-- Serializers & viewsets
-- Permissions & authentication
-- Browsable API
-- Token auth (JWT)
-
-### ✅ Frontend Integration
-- Template rendering
-- AJAX requests (fetch API)
-- Form handling & validation
-- Responsive design (Tailwind)
-- Real-time updates
-
-### ✅ Database Design
-- Model relationships (FK, M2M)
-- Indexing & optimization
-- Query optimization (select_related, prefetch_related)
-- Data integrity with signals
-- PostgreSQL features
-
-### ✅ Authentication & Security
-- User authentication
-- Permissions & access control
-- CSRF protection
-- XSS prevention
-- SQL injection safety
-- Password hashing
-
-### ✅ Testing & Quality
-- Unit tests
-- Integration tests
-- Test fixtures
-- Test organization
-- Coverage analysis
-
-### ✅ Deployment & DevOps
-- Docker containerization
-- Environment configuration
-- Production settings
-- Security hardening
-- CI/CD readiness
-
----
-
-## 🤝 Contributing
-
-1. **Fork** the repository
-2. **Create** a feature branch (`git checkout -b feature/amazing-feature`)
-3. **Make** your changes
-4. **Write** tests for new features
-5. **Commit** with clear messages
-6. **Push** to your fork
-7. **Submit** a pull request
-
-### Code Style
-- Follow [PEP 8](https://pep8.org/)
-- Use type hints where helpful
-- Write descriptive commit messages
-- Add docstrings to functions
-
----
-
-## 📄 License
-
-MIT License - See LICENSE file for details
-
----
-
-## 📞 Support
-
-- 📖 Check [GETTING_STARTED.md](GETTING_STARTED.md) for setup issues
-- 🏗️ See [ARCHITECTURE.md](ARCHITECTURE.md) for technical details
-- 🐛 Create an issue for bugs
-- 💡 Suggest features via discussions
-
----
-
-## 🎉 Summary
-
-GRIND is a **complete, production-ready Django application** that demonstrates:
-
-| Feature | Status |
-|---------|--------|
-| Pure Django architecture | ✅ 100% |
-| Responsive design | ✅ Mobile/Tablet/Desktop |
-| Real data | ✅ 6 athletes, 40+ posts |
-| All features working | ✅ Posts, follows, DMs, notifications |
-| API endpoints | ✅ 30+ DRF endpoints |
-| Security | ✅ Auth, permissions, CSRF |
-| Testing | ✅ Comprehensive test suite |
-| Documentation | ✅ README, ARCHITECTURE, GETTING_STARTED |
-| Docker ready | ✅ PostgreSQL + Redis |
-| Production ready | ✅ WSGI, settings, security |
-
-**Built for learning, designed for production! 🚀**
-
----
-
-**Made with ❤️ for the IIM Digital School Django Formation**  
-*Last updated: June 16, 2026*
+Ce dépôt est l'**implémentation optimisée** (migration full-Rust) d'un audit d'écoconception mené sur
+la version Django d'origine (sur `master`). Preuves techniques dans **`ecoconception/`** : mesures
+Lighthouse, profils Grafana Pyroscope (flamegraphs avant/après cache), tests **k6 Cloud**, stratégie
+de cache HIT/PASS, scripts de charge (`ecoconception/k6/`). Le rapport PDF complet est conservé hors
+dépôt (privé).

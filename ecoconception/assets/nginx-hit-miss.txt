@@ -1,0 +1,17 @@
+########## HIT/MISS RÉEL via proxy nginx (:8080) devant l'app (:3000) ##########
+# X-Cache-Status = statut réel du cache nginx — Wed Jul  8 11:21:54 CEST 2026
+
+===== ROUTE PUBLIQUE  /  (anonyme) =====
+1er appel : X-Cache-Status: MISS
+2e appel  : X-Cache-Status: HIT
+3e appel  : X-Cache-Status: HIT
+-> MISS puis HIT : la route publique est servie par nginx sans retoucher l'app (économie serveur).
+
+===== MÊME ROUTE  /  AUTHENTIFIÉE (cookie de session) =====
+appel 1 : X-Cache-Status: BYPASS
+appel 2 : X-Cache-Status: BYPASS
+-> BYPASS : donnée utilisateur -> jamais servie du cache partagé (sécurité).
+
+===== ASSET  /pkg/grind.wasm  (public, immutable) =====
+1er : X-Cache-Status: MISS
+2e  : X-Cache-Status: HIT

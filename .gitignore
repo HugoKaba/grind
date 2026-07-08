@@ -1,51 +1,40 @@
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-env/
-venv/
-ENV/
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
+# --- Rust (workspace à la racine) ---
+/target
+/target.nosync
+**/*.rs.bk
+Cargo.lock.bak
 
-# Django
-*.log
-db.sqlite3
-media/
-staticfiles/
-local_settings.py
+# cargo-leptos (artefacts de build front)
+/web/target
+/web/dist
+# config Tailwind v3 auto-générée par cargo-leptos (inutile : on est en v4 CSS-first)
+/tailwind.config.js
 
-# IDE
+# --- Env / secrets ---
+.env
+.env.local
+
+# --- IDE ---
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
-.DS_Store
-.env
-.env.local
 
-# Testing
-.coverage
-htmlcov/
-.pytest_cache/
-.tox/
-
-# OS
+# --- OS ---
 .DS_Store
 Thumbs.db
+
+# --- Python legacy (retiré du repo ; ignoré si un venv local subsiste) ---
+.venv/
+__pycache__/
+*.py[cod]
+
+# --- Divers local ---
+dump.rdb
+
+# --- Rapport écoconception : gardé privé (non versionné) ---
+/ecoconception/RAPPORT-OPTIMISATION-RUST.md
+/ecoconception/RAPPORT-OPTIMISATION-RUST.pdf
+/ecoconception/build-pdf.mjs
+/ecoconception/_report.html

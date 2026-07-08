@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="820" height="240" font-family="system-ui,Arial">
+<rect width="820" height="240" fill="#fff"/>
+<text x="20" y="30" font-size="16" font-weight="700" fill="#111">Poids du bundle WASM — avant / après (÷18 sur le réseau)</text>
+<text x="20" y="80" font-size="13" fill="#374151">Dev (debug)</text>
+   <rect x="200" y="60" width="560" height="30" rx="4" fill="#ff4e42"/>
+   <text x="768" y="80" font-size="13" font-weight="700" fill="#111">7.8 Mo</text><text x="20" y="134" font-size="13" fill="#374151">Release + wasm-opt</text>
+   <rect x="200" y="114" width="107.9076923076923" height="30" rx="4" fill="#ffa400"/>
+   <text x="315.9076923076923" y="134" font-size="13" font-weight="700" fill="#111">1.5 Mo</text><text x="20" y="188" font-size="13" fill="#374151">Release + Brotli (servi)</text>
+   <rect x="200" y="168" width="31.302564102564105" height="30" rx="4" fill="#0cce6b"/>
+   <text x="239.3025641025641" y="188" font-size="13" font-weight="700" fill="#111">436 Ko</text></svg>
