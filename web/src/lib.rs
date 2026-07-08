@@ -10,7 +10,7 @@
 
 use leptos::form::ActionForm;
 use leptos::prelude::*;
-use leptos_meta::{provide_meta_context, MetaTags, Stylesheet, Title};
+use leptos_meta::{provide_meta_context, Meta, MetaTags, Stylesheet, Title};
 use leptos_router::components::{Route, Router, Routes, A};
 use leptos_router::hooks::use_params_map;
 use leptos_router::path;
@@ -245,7 +245,20 @@ pub fn App() -> impl IntoView {
     provide_meta_context();
     view! {
         <Stylesheet id="leptos" href="/pkg/grind.css" />
-        <Title text="GRIND - Sports Social Network" />
+        <Title text="GRIND — Réseau social sport" />
+        // ── SEO : description, robots, Open Graph, Twitter Card, thème ──
+        <Meta name="description" content="GRIND, le réseau social des sportifs : publiez, suivez vos athlètes, likez et repostez. Léger, rapide et accessible." />
+        <Meta name="robots" content="index, follow" />
+        <Meta name="theme-color" content="#dc2626" />
+        <Meta name="author" content="GRIND" />
+        <Meta property="og:title" content="GRIND — Réseau social sport" />
+        <Meta property="og:description" content="Le réseau social des sportifs : posts, suivis, likes et reposts en temps réel." />
+        <Meta property="og:type" content="website" />
+        <Meta property="og:locale" content="fr_FR" />
+        <Meta property="og:site_name" content="GRIND" />
+        <Meta name="twitter:card" content="summary" />
+        <Meta name="twitter:title" content="GRIND — Réseau social sport" />
+        <Meta name="twitter:description" content="Posts, suivis, likes et reposts sport en temps réel." />
         <Router>
             // ── Barre mobile (haut) ──
             <div class="mobile-header">
@@ -260,21 +273,23 @@ pub fn App() -> impl IntoView {
                         {ic_dumbbell()}
                         <span>"GRIND"</span>
                     </div>
-                    <nav style="flex:1;">
-                        <A href="/" attr:class="nav-item">{ic_home()}<span>"Home"</span></A>
+                    <nav style="flex:1;" aria-label="Navigation principale">
+                        <A href="/" attr:class="nav-item">{ic_home()}<span>"Accueil"</span></A>
                         <A href="/sports" attr:class="nav-item">{ic_trophy()}<span>"Sports"</span></A>
                         <A href="/trending" attr:class="nav-item">{ic_fire()}<span>"Trending"</span></A>
                         <A href="/notifications" attr:class="nav-item">{ic_bell()}<span>"Notifications"</span></A>
                         <A href="/messages" attr:class="nav-item">{ic_mail()}<span>"Messages"</span></A>
+                        <A href="/login" attr:class="nav-item">{ic_user()}<span>"Connexion"</span></A>
                         <A href="/admin" attr:class="nav-item">{ic_shield()}<span>"Admin"</span></A>
                     </nav>
-                    <A href="/" attr:class="post-btn">{ic_pen()}<span>"Post Update"</span></A>
+                    <A href="/" attr:class="post-btn">{ic_pen()}<span>"Publier"</span></A>
                 </aside>
 
                 // ── Colonne centrale : contenu de la route ──
                 <main class="feed-container">
                     <Routes fallback=|| view! { <div class="empty-state">"Page introuvable."</div> }>
                         <Route path=path!("/") view=Home />
+                        <Route path=path!("/login") view=LoginPage />
                         <Route path=path!("/post/:id") view=PostDetail />
                         <Route path=path!("/u/:username") view=Profile />
                         <Route path=path!("/sports") view=Sports />
@@ -349,11 +364,69 @@ fn TrendingAside() -> impl IntoView {
 //  Pages
 // ════════════════════════════════════════════════════════════════════════
 
+/// Page de connexion / inscription dédiée (route `/login`).
+/// Formulaires labellisés (accessibilité) + autocomplete + carte façon Django.
+#[component]
+fn LoginPage() -> impl IntoView {
+    let login = ServerAction::<Login>::new();
+    let register = ServerAction::<Register>::new();
+    view! {
+        <Title text="Connexion / GRIND" />
+        <Meta name="description" content="Connectez-vous à GRIND ou créez votre compte pour publier, suivre des athlètes, liker et reposter." />
+        <div class="auth-wrap">
+            <section class="auth-card" aria-labelledby="auth-title">
+                <div class="auth-logo">{ic_dumbbell()}<span>"GRIND"</span></div>
+                <h1 id="auth-title" class="auth-title">"Connexion"</h1>
+                <p class="auth-sub">"Le réseau social des sportifs — connectez-vous à votre compte."</p>
+
+                <ActionForm action=login>
+                    <label for="login-username">"Nom d'utilisateur"</label>
+                    <input id="login-username" class="field" type="text" name="username"
+                        autocomplete="username" placeholder="ex : messi" required=true />
+                    <label for="login-password">"Mot de passe"</label>
+                    <input id="login-password" class="field" type="password" name="password"
+                        autocomplete="current-password" placeholder="Votre mot de passe" required=true />
+                    <button type="submit" class="btn-post" style="width:100%; margin-top:10px;">"Se connecter"</button>
+                </ActionForm>
+                {move || match login.value().get() {
+                    Some(Ok(u)) => view! { <p class="form-msg-ok" role="status">"Connecté : @"{u.username}" ✓"</p> }.into_any(),
+                    Some(Err(e)) => view! { <p class="form-msg-err" role="alert">"Échec de connexion : "{e.to_string()}</p> }.into_any(),
+                    None => ().into_any(),
+                }}
+
+                <div class="auth-hint">
+                    {ic_info()}
+                    <span><strong>"Comptes de test : "</strong>"messi ou ronaldo — mot de passe "<code>"grind1234"</code></span>
+                </div>
+
+                <div class="auth-divider"><span>"Pas encore de compte ?"</span></div>
+
+                <h2 class="auth-title" style="font-size:16px;">"Créer un compte"</h2>
+                <ActionForm action=register>
+                    <label for="reg-username">"Nom d'utilisateur"</label>
+                    <input id="reg-username" class="field" type="text" name="username"
+                        autocomplete="username" placeholder="lettres, chiffres, _" required=true />
+                    <label for="reg-display">"Nom affiché (optionnel)"</label>
+                    <input id="reg-display" class="field" type="text" name="display_name"
+                        autocomplete="name" placeholder="ex : Lionel Messi" />
+                    <label for="reg-password">"Mot de passe (8 caractères min)"</label>
+                    <input id="reg-password" class="field" type="password" name="password"
+                        autocomplete="new-password" placeholder="Choisissez un mot de passe" required=true />
+                    <button type="submit" class="btn-post" style="width:100%; margin-top:10px;">"Créer le compte"</button>
+                </ActionForm>
+                {move || match register.value().get() {
+                    Some(Ok(u)) => view! { <p class="form-msg-ok" role="status">"Compte créé et connecté : @"{u.username}" ✓"</p> }.into_any(),
+                    Some(Err(e)) => view! { <p class="form-msg-err" role="alert">"Échec : "{e.to_string()}</p> }.into_any(),
+                    None => ().into_any(),
+                }}
+            </section>
+        </div>
+    }
+}
+
 #[component]
 fn Home() -> impl IntoView {
     // Server actions (formulaires → server functions).
-    let login = ServerAction::<Login>::new();
-    let register = ServerAction::<Register>::new();
     let create = ServerAction::<CreatePost>::new();
     let like = ServerAction::<ToggleLike>::new();
     let repost = ServerAction::<ToggleRepost>::new();
@@ -373,46 +446,13 @@ fn Home() -> impl IntoView {
     );
 
     view! {
+        <Title text="Accueil / GRIND" />
+        <Meta name="description" content="GRIND — le fil d'actualité sport : posts, likes, reposts et suivis d'athlètes en temps réel." />
         // En-tête « Home »
         <div class="header-bar">
-            <h2 class="header-title" style="margin-bottom:12px;">"Home"</h2>
-            <div class="tabs">
-                <span class="tab active">"Everyone"</span>
-            </div>
-        </div>
-
-        // Connexion / Inscription (compact, style Django)
-        <div class="form-card">
-            <div style="display:flex; gap:24px; flex-wrap:wrap;">
-                <div style="flex:1; min-width:220px;">
-                    <h3 style="font-weight:700; color:#111827; margin-bottom:6px;">
-                        {ic_user()}" Connexion"
-                    </h3>
-                    <ActionForm action=login>
-                        <input class="field" type="text" name="username" placeholder="username (ex : messi)" />
-                        <input class="field" type="password" name="password" placeholder="mot de passe (grind1234)" />
-                        <button type="submit" class="btn-post" style="margin-top:6px;">"Se connecter"</button>
-                    </ActionForm>
-                    {move || match login.value().get() {
-                        Some(Ok(u)) => view! { <p class="form-msg-ok">"Connecté : @"{u.username}</p> }.into_any(),
-                        Some(Err(e)) => view! { <p class="form-msg-err">"Échec : "{e.to_string()}</p> }.into_any(),
-                        None => ().into_any(),
-                    }}
-                </div>
-                <div style="flex:1; min-width:220px;">
-                    <h3 style="font-weight:700; color:#111827; margin-bottom:6px;">"Inscription"</h3>
-                    <ActionForm action=register>
-                        <input class="field" type="text" name="username" placeholder="username ([a-z0-9_])" />
-                        <input class="field" type="text" name="display_name" placeholder="nom affiché (optionnel)" />
-                        <input class="field" type="password" name="password" placeholder="mot de passe (min 8)" />
-                        <button type="submit" class="btn-post" style="margin-top:6px;">"Créer le compte"</button>
-                    </ActionForm>
-                    {move || match register.value().get() {
-                        Some(Ok(u)) => view! { <p class="form-msg-ok">"Compte créé : @"{u.username}</p> }.into_any(),
-                        Some(Err(e)) => view! { <p class="form-msg-err">"Échec : "{e.to_string()}</p> }.into_any(),
-                        None => ().into_any(),
-                    }}
-                </div>
+            <h1 class="header-title" style="margin-bottom:12px;">"Accueil"</h1>
+            <div class="tabs" role="tablist">
+                <span class="tab active" role="tab" aria-selected="true">"Tout le monde"</span>
             </div>
         </div>
 

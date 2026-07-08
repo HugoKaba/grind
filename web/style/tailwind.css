@@ -379,6 +379,97 @@ body {
   margin-top: 8px;
 }
 
+/* ── Page de connexion / inscription (/login) ──────────────────────────── */
+.auth-wrap {
+  min-height: 100vh;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 40px 16px;
+  background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%);
+}
+.auth-card {
+  background: #ffffff;
+  width: 100%;
+  max-width: 420px;
+  border-radius: 16px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.25);
+  padding: 32px 28px;
+}
+.auth-logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  font-size: 30px;
+  font-weight: 900;
+  letter-spacing: -1px;
+  color: #dc2626;
+  margin-bottom: 8px;
+}
+.auth-logo .ic {
+  width: 30px;
+  height: 30px;
+  color: #dc2626;
+}
+.auth-title {
+  text-align: center;
+  color: #111827;
+  font-size: 24px;
+  font-weight: 800;
+  margin: 4px 0;
+}
+.auth-sub {
+  text-align: center;
+  color: #6b7280;
+  font-size: 14px;
+  margin-bottom: 20px;
+}
+.auth-card label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+  margin: 10px 0 2px;
+}
+.auth-hint {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #991b1b;
+  font-size: 13px;
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-top: 16px;
+}
+.auth-hint .ic {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.auth-hint code {
+  background: #fee2e2;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-weight: 700;
+}
+.auth-divider {
+  text-align: center;
+  border-top: 1px solid #e5e7eb;
+  margin: 24px 0 8px;
+}
+.auth-divider span {
+  position: relative;
+  top: -11px;
+  background: #ffffff;
+  padding: 0 12px;
+  color: #6b7280;
+  font-size: 13px;
+}
+
 /* ── Barre + nav mobile ────────────────────────────────────────────────── */
 .mobile-header,
 .mobile-nav {
